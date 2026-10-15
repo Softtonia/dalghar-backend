@@ -124,7 +124,48 @@ export class RestaurantService {
       updatedBy: new Types.ObjectId(userId),
     });
 
-    return await restaurant.save();
+    const saved = await restaurant.save();
+
+    // Trigger Add Restaurant email event
+    try {
+      const { MailService } = await import('../../services/mail.service.js');
+      const { User } = await import('../../models/User.js');
+      const creator = await User.findById(userId);
+
+      // Collect target recipients: restaurant contact email + creator user email
+      const targetEmails = new Set<string>();
+      if (saved.contact?.email) targetEmails.add(saved.contact.email);
+      if (creator?.email) targetEmails.add(creator.email);
+
+      const restaurantPayload = {
+        name: saved.name,
+        code: saved.code,
+        slug: saved.slug,
+        phone: saved.contact.phone,
+        email: saved.contact.email,
+        website: saved.contact.website,
+        city: saved.address.city,
+        state: saved.address.state,
+        country: saved.address.country,
+        postalCode: saved.address.postalCode,
+        legalName: saved.business?.legalName,
+        gstin: saved.business?.gstin,
+        operatingStatus: saved.operatingStatus,
+      };
+
+      for (const email of targetEmails) {
+        MailService.sendAddRestaurantEmail({
+          to: email,
+          recipientName: creator?.name || saved.name,
+          restaurant: restaurantPayload,
+          createdByName: creator?.name,
+        }).catch((err) => console.error(`Failed to send add restaurant email to ${email}:`, err));
+      }
+    } catch {
+      // Non-blocking mail failure
+    }
+
+    return saved;
   }
 
   /**

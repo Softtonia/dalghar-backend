@@ -165,5 +165,16 @@ export class SettingsService {
 
     user.passwordHash = await bcrypt.hash(newPass, 10);
     await user.save();
+
+    // Trigger Change Password event email notification
+    try {
+      const { MailService } = await import('../../services/mail.service.js');
+      MailService.sendChangePasswordEmail({
+        to: user.email,
+        userName: user.name,
+      }).catch((err) => console.error('Failed to dispatch change password email:', err));
+    } catch {
+      // Non-blocking mail failure
+    }
   }
 }

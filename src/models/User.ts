@@ -16,6 +16,8 @@ export interface IUser extends Document {
   branchId?: string | null;
   permissions: string[];
   isActive: boolean;
+  resetPasswordOtp?: string | null;
+  resetPasswordExpires?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -60,6 +62,14 @@ const userSchema = new Schema<IUser>(
     isActive: {
       type: Boolean,
       default: true,
+    },
+    resetPasswordOtp: {
+      type: String,
+      default: null,
+    },
+    resetPasswordExpires: {
+      type: Date,
+      default: null,
     },
   },
   {

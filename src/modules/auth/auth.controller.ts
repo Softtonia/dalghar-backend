@@ -68,5 +68,33 @@ export class AuthController {
       next(error);
     }
   }
+
+  static async forgotPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { email } = req.body;
+      if (!email) {
+        res.status(400).json({ success: false, message: 'Email address is required.' });
+        return;
+      }
+      const result = await AuthService.forgotPassword(email);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async resetPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { email, otp, newPassword } = req.body;
+      if (!email || !otp || !newPassword) {
+        res.status(400).json({ success: false, message: 'Email, OTP, and new password are required.' });
+        return;
+      }
+      const result = await AuthService.resetPassword({ email, otp, newPassword });
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 

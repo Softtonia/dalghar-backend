@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { connectDatabase } from '../config/database.js';
 import { seedSuperAdmin } from './seeders/admin.seeder.js';
+import { seedDefaultRoles } from './seeders/role.seeder.js';
 
 const runSeed = async (): Promise<void> => {
   try {
@@ -8,6 +9,7 @@ const runSeed = async (): Promise<void> => {
     await connectDatabase();
 
     await seedSuperAdmin();
+    await seedDefaultRoles();
 
     console.log('Database seeding completed.');
   } catch (error) {

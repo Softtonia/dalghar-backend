@@ -75,33 +75,66 @@ export const requireRole = (...roles: UserRole[]) => {
 
 /**
  * Fine-grained RBAC permission checking middleware.
- * Super Admin bypasses checks. Other roles check ROLE_PERMISSIONS or custom granted permissions.
+ * Super Admin bypasses checks.
+ * Dynamically queries current permissions from User, assigned Role(s), and ROLE_PERMISSIONS
+ * so that any permission updates made by the admin take effect immediately without requiring re-login.
  */
 export const requirePermission = (...requiredPermissions: string[]) => {
-  return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
-    if (!req.user) {
-      res.status(401).json({ success: false, message: 'Unauthorized. Authentication required.' });
-      return;
+  return async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, message: 'Unauthorized. Authentication required.' });
+        return;
+      }
+
+      // Super Admin bypasses individual permission checks
+      if (req.user.role === 'SUPER_ADMIN') {
+        return next();
+      }
+
+      // Dynamically fetch latest user from database
+      const { User } = await import('../models/User.js');
+      const { UserHasRole } = await import('../models/UserHasRole.js');
+      const { Role } = await import('../models/Role.js');
+
+      const dbUser = await User.findById(req.user.userId);
+      if (!dbUser || !dbUser.isActive) {
+        res.status(401).json({ success: false, message: 'Account not found or has been disabled.' });
+        return;
+      }
+
+      // Collect base permissions from static role definition
+      const baseRolePermissions = ROLE_PERMISSIONS[dbUser.role] || [];
+      const customPermissions = dbUser.permissions || [];
+
+      // Collect permissions from all assigned dynamic roles (via UserHasRole)
+      const userRoles = await UserHasRole.find({ userId: dbUser._id });
+      const roleIds = userRoles.map((ur) => ur.roleId);
+      const dynamicRoles = await Role.find({ _id: { $in: roleIds }, isActive: true });
+      const dynamicPermissions = dynamicRoles.flatMap((r) => r.permissions || []);
+
+      const userPermissions = Array.from(
+        new Set([...baseRolePermissions, ...customPermissions, ...dynamicPermissions])
+      );
+
+      const hasPermission = requiredPermissions.every(
+        (perm) =>
+          userPermissions.includes(perm) ||
+          userPermissions.includes('*') ||
+          userPermissions.includes('restaurant.*')
+      );
+
+      if (!hasPermission) {
+        res.status(403).json({
+          success: false,
+          message: `Forbidden: Missing required permission(s) [${requiredPermissions.join(', ')}]`,
+        });
+        return;
+      }
+
+      next();
+    } catch (err) {
+      next(err);
     }
-
-    // Super Admin bypasses individual permission checks
-    if (req.user.role === 'SUPER_ADMIN') {
-      return next();
-    }
-
-    const userPermissions = req.user.permissions || ROLE_PERMISSIONS[req.user.role] || [];
-    const hasPermission = requiredPermissions.every(
-      (perm) => userPermissions.includes(perm) || userPermissions.includes('*') || userPermissions.includes('restaurant.*')
-    );
-
-    if (!hasPermission) {
-      res.status(403).json({
-        success: false,
-        message: `Forbidden: Missing required permission(s) [${requiredPermissions.join(', ')}]`,
-      });
-      return;
-    }
-
-    next();
   };
 };

@@ -4,6 +4,9 @@ import { userRoutes } from '../modules/users/index.js';
 import { restaurantRoutes } from '../modules/restaurants/index.js';
 import { branchRoutes } from '../modules/branches/index.js';
 import { settingsRoutes } from '../modules/settings/index.js';
+import { roleRoutes } from '../modules/roles/index.js';
+import { emailTemplateRoutes } from '../modules/email-templates/email-template.routes.js';
+import { campaignRoutes } from '../modules/campaigns/campaign.routes.js';
 
 const router = Router();
 
@@ -20,5 +23,9 @@ router.use('/users', userRoutes);
 router.use('/restaurants', restaurantRoutes);
 router.use('/branches', branchRoutes);
 router.use('/settings', settingsRoutes);
+router.use('/roles', roleRoutes);
+router.use('/email-templates', emailTemplateRoutes);
+router.use('/campaigns', campaignRoutes);
 
 export const apiRouter = router;
+

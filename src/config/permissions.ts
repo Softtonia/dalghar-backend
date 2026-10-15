@@ -36,6 +36,11 @@ export const PERMISSIONS = {
   STAFF_VIEW: 'staff.view',
   STAFF_MANAGE: 'staff.manage',
 
+  ROLE_VIEW: 'role.view',
+  ROLE_CREATE: 'role.create',
+  ROLE_UPDATE: 'role.update',
+  ROLE_DELETE: 'role.delete',
+
   TABLE_VIEW: 'table.view',
   TABLE_MANAGE: 'table.manage',
 

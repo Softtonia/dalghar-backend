@@ -168,7 +168,54 @@ export class BranchService {
     });
 
     const saved = await branch.save();
-    return await saved.populate('restaurantId', 'name code slug logo');
+    const populated = await saved.populate('restaurantId', 'name code slug logo');
+
+    // Trigger Add Branch email event
+    try {
+      const { MailService } = await import('../../services/mail.service.js');
+      const { User } = await import('../../models/User.js');
+      const creator = await User.findById(userId);
+
+      const targetEmails = new Set<string>();
+      if (saved.contact?.email) targetEmails.add(saved.contact.email);
+      if (creator?.email) targetEmails.add(creator.email);
+
+      const parentRestaurantName =
+        typeof populated.restaurantId === 'object' && populated.restaurantId !== null
+          ? (populated.restaurantId as any).name
+          : restaurant.name;
+
+      const branchPayload = {
+        name: saved.name,
+        code: saved.code,
+        slug: saved.slug,
+        type: saved.type,
+        restaurantName: parentRestaurantName,
+        phone: saved.contact.phone,
+        email: saved.contact.email,
+        managerName: saved.contact.managerName,
+        managerPhone: saved.contact.managerPhone,
+        addressLine1: saved.address.addressLine1,
+        city: saved.address.city,
+        state: saved.address.state,
+        postalCode: saved.address.postalCode,
+        seatingCapacity: saved.seatingCapacity,
+        operatingStatus: saved.operatingStatus,
+      };
+
+      for (const email of targetEmails) {
+        MailService.sendAddBranchEmail({
+          to: email,
+          recipientName: creator?.name || saved.contact.managerName || saved.name,
+          branch: branchPayload,
+          createdByName: creator?.name,
+        }).catch((err) => console.error(`Failed to send add branch email to ${email}:`, err));
+      }
+    } catch {
+      // Non-blocking mail failure
+    }
+
+    return populated;
   }
 
   /**
