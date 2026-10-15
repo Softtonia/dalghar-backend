@@ -1,0 +1,98 @@
+import { UserRole } from '../models/User.js';
+
+export const PERMISSIONS = {
+  DASHBOARD_VIEW: 'dashboard.view',
+
+  RESTAURANT_VIEW: 'restaurant.view',
+  RESTAURANT_CREATE: 'restaurant.create',
+  RESTAURANT_UPDATE: 'restaurant.update',
+  RESTAURANT_DELETE: 'restaurant.delete',
+
+  BRANCH_VIEW: 'branch.view',
+  BRANCH_CREATE: 'branch.create',
+  BRANCH_UPDATE: 'branch.update',
+  BRANCH_DELETE: 'branch.delete',
+
+  MENU_VIEW: 'menu.view',
+  MENU_CREATE: 'menu.create',
+  MENU_UPDATE: 'menu.update',
+  MENU_DELETE: 'menu.delete',
+
+  ORDER_VIEW: 'order.view',
+  ORDER_CREATE: 'order.create',
+  ORDER_UPDATE: 'order.update',
+  ORDER_CANCEL: 'order.cancel',
+
+  POS_VIEW: 'pos.view',
+  POS_CREATE_ORDER: 'pos.create_order',
+  POS_PAYMENT: 'pos.payment',
+
+  INVENTORY_VIEW: 'inventory.view',
+  INVENTORY_MANAGE: 'inventory.manage',
+
+  CUSTOMER_VIEW: 'customer.view',
+  CUSTOMER_MANAGE: 'customer.manage',
+
+  STAFF_VIEW: 'staff.view',
+  STAFF_MANAGE: 'staff.manage',
+
+  TABLE_VIEW: 'table.view',
+  TABLE_MANAGE: 'table.manage',
+
+  REPORT_VIEW: 'report.view',
+
+  SETTINGS_VIEW: 'settings.view',
+  SETTINGS_MANAGE: 'settings.manage',
+} as const;
+
+export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS] | '*';
+
+export const ALL_PERMISSIONS: string[] = Object.values(PERMISSIONS);
+
+export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
+  SUPER_ADMIN: ALL_PERMISSIONS,
+  RESTAURANT_ADMIN: [
+    PERMISSIONS.DASHBOARD_VIEW,
+    PERMISSIONS.BRANCH_VIEW,
+    PERMISSIONS.BRANCH_CREATE,
+    PERMISSIONS.BRANCH_UPDATE,
+    PERMISSIONS.BRANCH_DELETE,
+    PERMISSIONS.MENU_VIEW,
+    PERMISSIONS.MENU_CREATE,
+    PERMISSIONS.MENU_UPDATE,
+    PERMISSIONS.MENU_DELETE,
+    PERMISSIONS.ORDER_VIEW,
+    PERMISSIONS.INVENTORY_VIEW,
+    PERMISSIONS.INVENTORY_MANAGE,
+    PERMISSIONS.STAFF_VIEW,
+    PERMISSIONS.STAFF_MANAGE,
+    PERMISSIONS.REPORT_VIEW,
+    PERMISSIONS.SETTINGS_VIEW,
+  ],
+  BRANCH_MANAGER: [
+    PERMISSIONS.DASHBOARD_VIEW,
+    PERMISSIONS.MENU_VIEW,
+    PERMISSIONS.ORDER_VIEW,
+    PERMISSIONS.ORDER_CREATE,
+    PERMISSIONS.ORDER_UPDATE,
+    PERMISSIONS.INVENTORY_VIEW,
+    PERMISSIONS.INVENTORY_MANAGE,
+    PERMISSIONS.STAFF_VIEW,
+    PERMISSIONS.CUSTOMER_VIEW,
+    PERMISSIONS.TABLE_VIEW,
+    PERMISSIONS.TABLE_MANAGE,
+    PERMISSIONS.REPORT_VIEW,
+  ],
+  CASHIER: [
+    PERMISSIONS.DASHBOARD_VIEW,
+    PERMISSIONS.ORDER_VIEW,
+    PERMISSIONS.ORDER_CREATE,
+    PERMISSIONS.ORDER_UPDATE,
+    PERMISSIONS.POS_VIEW,
+    PERMISSIONS.POS_CREATE_ORDER,
+    PERMISSIONS.POS_PAYMENT,
+    PERMISSIONS.CUSTOMER_VIEW,
+    PERMISSIONS.TABLE_VIEW,
+  ],
+  KITCHEN_STAFF: [PERMISSIONS.ORDER_VIEW, PERMISSIONS.ORDER_UPDATE],
+};
