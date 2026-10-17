@@ -207,4 +207,74 @@ export class CampaignService {
       stats: campaign.stats,
     };
   }
+
+  /**
+   * Dispatches active automated campaigns triggered by a lifecycle system event
+   */
+  static async triggerEventCampaigns(
+    eventKeys: string | string[],
+    context?: {
+      targetEmails?: string[];
+      variables?: Record<string, any>;
+    }
+  ) {
+    try {
+      const keys = Array.isArray(eventKeys) ? eventKeys : [eventKeys];
+      const campaigns = await Campaign.find({
+        sendType: 'triggered',
+        triggerEvent: { $in: keys },
+        isActive: true,
+      });
+
+      for (const campaign of campaigns) {
+        const recipients = await this.resolveAudienceRecipients(campaign);
+        if (context?.targetEmails) {
+          for (const email of context.targetEmails) {
+            if (email && !recipients.includes(email)) {
+              recipients.push(email);
+            }
+          }
+        }
+
+        if (recipients.length === 0) continue;
+
+        let sent = 0;
+        let failed = 0;
+
+        // Perform variable substitution if context variables provided
+        let processedBody = campaign.bodyHtml;
+        let processedSubject = campaign.subject;
+        if (context?.variables) {
+          for (const [key, val] of Object.entries(context.variables)) {
+            const regex = new RegExp(`{{\\s*${key}\\s*}}`, 'gi');
+            processedBody = processedBody.replace(regex, String(val ?? ''));
+            processedSubject = processedSubject.replace(regex, String(val ?? ''));
+          }
+        }
+
+        const fullHtml = MailService.wrapTemplate(processedSubject, processedBody);
+
+        for (const to of recipients) {
+          try {
+            await MailService.sendMail({
+              to,
+              subject: processedSubject,
+              html: fullHtml,
+            });
+            sent++;
+          } catch (err) {
+            console.error(`Failed to send event campaign to ${to}:`, err);
+            failed++;
+          }
+        }
+
+        campaign.stats.totalSent += sent;
+        campaign.stats.totalFailed += failed;
+        campaign.stats.lastTriggeredAt = new Date();
+        await campaign.save();
+      }
+    } catch (err) {
+      console.error('Error triggering event campaigns:', err);
+    }
+  }
 }

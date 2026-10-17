@@ -1,7 +1,7 @@
 import { Role } from '../../models/Role.js';
 import { User } from '../../models/User.js';
 import { UserHasRole } from '../../models/UserHasRole.js';
-import { ALL_PERMISSIONS, PERMISSIONS } from '../../config/permissions.js';
+import { ALL_PERMISSIONS, PERMISSIONS, ROLE_PERMISSIONS } from '../../config/permissions.js';
 
 export const seedDefaultRoles = async (): Promise<void> => {
   const defaultRoles = [
@@ -128,6 +128,33 @@ export const seedDefaultRoles = async (): Promise<void> => {
         PERMISSIONS.ORDER_VIEW,
         PERMISSIONS.REPORT_VIEW,
       ],
+      isDefault: true,
+      isActive: true,
+    },
+    {
+      name: 'Branch Manager',
+      slug: 'branch-manager',
+      description: '<p>Branch outlet supervisor managing dine-in tables, kitchen dispatch, store staff, and branch reports.</p>',
+      notes: 'Branch location operational supervisor.',
+      permissions: ROLE_PERMISSIONS.BRANCH_MANAGER,
+      isDefault: true,
+      isActive: true,
+    },
+    {
+      name: 'Cashier',
+      slug: 'cashier',
+      description: '<p>Front-desk cashier handling orders, POS billing, tables, and payments.</p>',
+      notes: 'Front counter billing & POS operator.',
+      permissions: ROLE_PERMISSIONS.CASHIER,
+      isDefault: true,
+      isActive: true,
+    },
+    {
+      name: 'Kitchen Staff',
+      slug: 'kitchen-staff',
+      description: '<p>KOT display viewer and kitchen fulfillment staff.</p>',
+      notes: 'Kitchen & food prep display operator.',
+      permissions: ROLE_PERMISSIONS.KITCHEN_STAFF,
       isDefault: true,
       isActive: true,
     },

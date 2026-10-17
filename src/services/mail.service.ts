@@ -383,6 +383,124 @@ export class MailService {
     });
   }
 
+  // EVENT: Deactivate Restaurant Notification
+  static async sendDeactivateRestaurantEmail(params: {
+    to: string;
+    recipientName?: string;
+    restaurant: {
+      name: string;
+      code: string;
+      email?: string | null;
+      phone?: string | null;
+    };
+    actionBy?: string;
+    reason?: string;
+  }) {
+    const r = params.restaurant;
+    const viewUrl = `${config.clientUrl}/admin/restaurants`;
+    const html = this.wrapTemplate(
+      'Restaurant Deactivated / Suspended',
+      `
+      <p>Hello <strong>${params.recipientName || 'Administrator'}</strong>,</p>
+      <p>This notice confirms that the operating status of restaurant <strong>${r.name}</strong> (${r.code}) has been marked as <strong style="color: #DC2626;">INACTIVE</strong>.</p>
+      
+      <div class="card-box" style="border-left: 4px solid #DC2626;">
+        <div style="font-weight: 700; color: #DC2626; margin-bottom: 12px; font-size: 15px; border-bottom: 1px solid #E2E8F0; padding-bottom: 6px;">
+          Status Update Notice
+        </div>
+        <div class="row"><span class="label">Restaurant Brand:</span><span class="val" style="font-weight: 700;">${r.name}</span></div>
+        <div class="row"><span class="label">Brand Code:</span><span class="val">${r.code}</span></div>
+        <div class="row"><span class="label">Status:</span><span class="val" style="color: #DC2626; font-weight: 700;">● INACTIVE / SUSPENDED</span></div>
+        <div class="row"><span class="label">Action Taken By:</span><span class="val">${params.actionBy || 'Administrator'}</span></div>
+        <div class="row"><span class="label">Effective Date:</span><span class="val">${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</span></div>
+        ${params.reason ? `<div class="row"><span class="label">Reason / Notes:</span><span class="val">${params.reason}</span></div>` : ''}
+      </div>
+
+      <p style="font-size: 13px; color: #475569; margin-top: 16px;">
+        While inactive, public ordering, POS billing, and branch operational synchronization for this brand are temporarily suspended.
+      </p>
+
+      <div class="btn-container">
+        <a href="${viewUrl}" class="btn" target="_blank" style="background-color: #DC2626;">Review Status in Portal &rarr;</a>
+      </div>
+      `
+    );
+    return await this.sendMail({
+      to: params.to,
+      subject: `[Status Alert] Restaurant ${r.name} (${r.code}) Has Been Deactivated - Dal Ghar`,
+      html,
+    });
+  }
+
+  // EVENT: Update Restaurant Notification
+  static async sendUpdateRestaurantEmail(params: {
+    to: string;
+    recipientName?: string;
+    restaurant: {
+      name: string;
+      code: string;
+      operatingStatus: string;
+      phone?: string | null;
+      email?: string | null;
+    };
+    updatedBy?: string;
+  }) {
+    const r = params.restaurant;
+    const viewUrl = `${config.clientUrl}/admin/restaurants`;
+    const html = this.wrapTemplate(
+      'Restaurant Details Updated',
+      `
+      <p>Hello <strong>${params.recipientName || 'Administrator'}</strong>,</p>
+      <p>The profile configuration or operating details for restaurant <strong>${r.name}</strong> (${r.code}) have been updated.</p>
+      
+      <div class="card-box">
+        <div class="row"><span class="label">Restaurant:</span><span class="val"><strong>${r.name}</strong> (${r.code})</span></div>
+        <div class="row"><span class="label">Status:</span><span class="val" style="color: #0284C7;">● Profile Modified</span></div>
+        <div class="row"><span class="label">Updated By:</span><span class="val">${params.updatedBy || 'Administrator'}</span></div>
+        <div class="row"><span class="label">Timestamp:</span><span class="val">${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</span></div>
+      </div>
+
+      <div class="btn-container">
+        <a href="${viewUrl}" class="btn" target="_blank">Review Updated Details &rarr;</a>
+      </div>
+      `
+    );
+    return await this.sendMail({
+      to: params.to,
+      subject: `[Update] Restaurant ${r.name} Profile Modified - Dal Ghar`,
+      html,
+    });
+  }
+
+  // EVENT: Delete Restaurant Notification
+  static async sendDeleteRestaurantEmail(params: {
+    to: string;
+    recipientName?: string;
+    restaurantName: string;
+    restaurantCode: string;
+    deletedBy?: string;
+  }) {
+    const html = this.wrapTemplate(
+      'Restaurant Brand Removed',
+      `
+      <p>Hello <strong>${params.recipientName || 'Administrator'}</strong>,</p>
+      <p>The restaurant record for <strong>${params.restaurantName}</strong> (${params.restaurantCode}) has been removed from the Dal Ghar platform.</p>
+      
+      <div class="card-box" style="border-left: 4px solid #B91C1C;">
+        <div class="row"><span class="label">Restaurant:</span><span class="val"><strong>${params.restaurantName}</strong></span></div>
+        <div class="row"><span class="label">Brand Code:</span><span class="val">${params.restaurantCode}</span></div>
+        <div class="row"><span class="label">Removed By:</span><span class="val">${params.deletedBy || 'Super Admin'}</span></div>
+        <div class="row"><span class="label">Removed At:</span><span class="val">${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</span></div>
+      </div>
+      `
+    );
+    return await this.sendMail({
+      to: params.to,
+      subject: `[Removed] Restaurant ${params.restaurantName} (${params.restaurantCode}) Deleted - Dal Ghar`,
+      html,
+    });
+  }
+
   // 3. EVENT: Welcome User
   static async sendWelcomeUserEmail(params: { to: string; userName: string; roleName?: string; loginUrl?: string }) {
     const loginUrl = params.loginUrl || `${config.clientUrl}/auth/login`;

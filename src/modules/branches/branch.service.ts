@@ -211,6 +211,18 @@ export class BranchService {
           createdByName: creator?.name,
         }).catch((err) => console.error(`Failed to send add branch email to ${email}:`, err));
       }
+
+      // Trigger active automated campaigns for BRANCH_OPENED
+      const { CampaignService } = await import('../campaigns/campaign.service.js');
+      CampaignService.triggerEventCampaigns(['BRANCH_OPENED', 'add_branch'], {
+        targetEmails: Array.from(targetEmails),
+        variables: {
+          branchName: saved.name,
+          branchCode: saved.code,
+          restaurantName: parentRestaurantName,
+          creatorName: creator?.name || 'Administrator',
+        },
+      }).catch((err) => console.error('Failed to trigger add_branch campaign:', err));
     } catch {
       // Non-blocking mail failure
     }
@@ -320,7 +332,28 @@ export class BranchService {
     branch.updatedBy = new Types.ObjectId(user.userId);
 
     const saved = await branch.save();
-    return await saved.populate('restaurantId', 'name code slug logo');
+    const populated = await saved.populate('restaurantId', 'name code slug logo');
+
+    if (operatingStatus === 'INACTIVE') {
+      try {
+        const { CampaignService } = await import('../campaigns/campaign.service.js');
+        const targetEmails: string[] = [];
+        if (saved.contact?.email) targetEmails.push(saved.contact.email.trim());
+
+        CampaignService.triggerEventCampaigns(['BRANCH_DEACTIVATED', 'deactivate_branch'], {
+          targetEmails,
+          variables: {
+            branchName: saved.name,
+            branchCode: saved.code,
+            restaurantName: (populated.restaurantId as any)?.name || 'Dal Ghar',
+          },
+        }).catch((err) => console.error('Failed to trigger deactivate_branch campaign:', err));
+      } catch (err) {
+        console.error('Non-blocking branch status trigger error:', err);
+      }
+    }
+
+    return populated;
   }
 
   /**

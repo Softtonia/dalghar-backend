@@ -44,11 +44,24 @@ export class RestaurantService {
       filter['address.city'] = { $regex: new RegExp(city, 'i') };
     }
 
-    // Search filter across name, code, slug
+    // Search filter across name, code (Res ID), slug, and _id
     if (search && search.trim() !== '') {
-      const sanitizedSearch = search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const trimmedSearch = search.trim();
+      const sanitizedSearch = trimmedSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const searchRegex = new RegExp(sanitizedSearch, 'i');
-      filter.$or = [{ name: searchRegex }, { code: searchRegex }, { slug: searchRegex }];
+      
+      const orConditions: any[] = [
+        { name: searchRegex },
+        { code: searchRegex },
+        { slug: searchRegex },
+      ];
+
+      // If user pasted a 24-char MongoDB ObjectId
+      if (Types.ObjectId.isValid(trimmedSearch) && String(new Types.ObjectId(trimmedSearch)) === trimmedSearch) {
+        orConditions.push({ _id: new Types.ObjectId(trimmedSearch) });
+      }
+
+      filter.$or = orConditions;
     }
 
     const skip = (page - 1) * limit;
@@ -102,12 +115,21 @@ export class RestaurantService {
     const slug = input.slug.toLowerCase().trim();
     const code = input.code.toUpperCase().trim();
 
-    // Duplicate check
+    const name = input.name.trim();
+
+    // Duplicate check across name (case-insensitive), slug, and code
     const existing = await Restaurant.findOne({
-      $or: [{ slug }, { code }],
+      $or: [
+        { name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+        { slug },
+        { code },
+      ],
     });
 
     if (existing) {
+      if (existing.name.toLowerCase() === name.toLowerCase()) {
+        throw new ApiError(409, `A restaurant with the name "${name}" already exists.`);
+      }
       if (existing.slug === slug) {
         throw new ApiError(409, `A restaurant with slug "${slug}" already exists.`);
       }
@@ -161,6 +183,17 @@ export class RestaurantService {
           createdByName: creator?.name,
         }).catch((err) => console.error(`Failed to send add restaurant email to ${email}:`, err));
       }
+
+      // Trigger active automated campaigns for RESTAURANT_ONBOARDED
+      const { CampaignService } = await import('../campaigns/campaign.service.js');
+      CampaignService.triggerEventCampaigns(['RESTAURANT_ONBOARDED', 'add_restaurant'], {
+        targetEmails: Array.from(targetEmails),
+        variables: {
+          restaurantName: saved.name,
+          restaurantCode: saved.code,
+          creatorName: creator?.name || 'Administrator',
+        },
+      }).catch((err) => console.error('Failed to trigger onboarding campaign:', err));
     } catch {
       // Non-blocking mail failure
     }
@@ -232,9 +265,40 @@ export class RestaurantService {
       restaurant.configuration = { ...restaurant.configuration, ...input.configuration };
     }
 
+    const previousStatus = restaurant.operatingStatus;
     restaurant.updatedBy = new Types.ObjectId(user.userId);
 
-    return await restaurant.save();
+    const saved = await restaurant.save();
+
+    if (input.operatingStatus === 'INACTIVE' && previousStatus !== 'INACTIVE') {
+      try {
+        const { MailService } = await import('../../services/mail.service.js');
+        const { User } = await import('../../models/User.js');
+        const actionUser = await User.findById(user.userId);
+        const targetEmails = new Set<string>();
+        if (saved.contact?.email) targetEmails.add(saved.contact.email.trim());
+        if (actionUser?.email) targetEmails.add(actionUser.email.trim());
+
+        for (const email of targetEmails) {
+          MailService.sendDeactivateRestaurantEmail({
+            to: email,
+            recipientName: actionUser?.name || saved.name,
+            restaurant: {
+              name: saved.name,
+              code: saved.code,
+              email: saved.contact?.email,
+              phone: saved.contact?.phone,
+            },
+            actionBy: actionUser?.name || 'Administrator',
+            reason: 'Operating status changed to Inactive / Suspended via portal',
+          }).catch((err) => console.error(`Failed to send deactivation email to ${email}:`, err));
+        }
+      } catch (err) {
+        console.error('Non-blocking restaurant deactivation email trigger error:', err);
+      }
+    }
+
+    return saved;
   }
 
   /**
@@ -262,7 +326,56 @@ export class RestaurantService {
     restaurant.operatingStatus = operatingStatus;
     restaurant.updatedBy = new Types.ObjectId(user.userId);
 
-    return await restaurant.save();
+    const saved = await restaurant.save();
+
+    // Trigger deactivation or status change notification
+    if (operatingStatus === 'INACTIVE') {
+      try {
+        const { MailService } = await import('../../services/mail.service.js');
+        const { User } = await import('../../models/User.js');
+        const { Campaign } = await import('../../models/Campaign.js');
+        const { CampaignService } = await import('../campaigns/campaign.service.js');
+        const actionUser = await User.findById(user.userId);
+
+        // 1. Send dedicated status alert directly to the restaurant email address
+        const targetEmails = new Set<string>();
+        if (saved.contact?.email) targetEmails.add(saved.contact.email.trim());
+        if (actionUser?.email) targetEmails.add(actionUser.email.trim());
+
+        for (const email of targetEmails) {
+          MailService.sendDeactivateRestaurantEmail({
+            to: email,
+            recipientName: actionUser?.name || saved.name,
+            restaurant: {
+              name: saved.name,
+              code: saved.code,
+              email: saved.contact?.email,
+              phone: saved.contact?.phone,
+            },
+            actionBy: actionUser?.name || 'Administrator',
+            reason: 'Operating status changed to Inactive / Suspended via portal',
+          }).catch((err) => console.error(`Failed to send deactivation email to ${email}:`, err));
+        }
+
+        // 2. Trigger any active automated campaigns configured for RESTAURANT_DEACTIVATED
+        await CampaignService.triggerEventCampaigns(
+          ['RESTAURANT_DEACTIVATED', 'deactivate_restaurant'],
+          {
+            targetEmails: Array.from(targetEmails),
+            variables: {
+              restaurantName: saved.name,
+              restaurantCode: saved.code,
+              actionBy: actionUser?.name || 'Administrator',
+              reason: 'Operating status changed to Inactive / Suspended via portal',
+            },
+          }
+        );
+      } catch (err) {
+        console.error('Non-blocking restaurant deactivation email trigger error:', err);
+      }
+    }
+
+    return saved;
   }
 
   /**

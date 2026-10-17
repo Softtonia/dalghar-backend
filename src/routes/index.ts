@@ -7,6 +7,8 @@ import { settingsRoutes } from '../modules/settings/index.js';
 import { roleRoutes } from '../modules/roles/index.js';
 import { emailTemplateRoutes } from '../modules/email-templates/email-template.routes.js';
 import { campaignRoutes } from '../modules/campaigns/campaign.routes.js';
+import { menuRoutes } from '../modules/menu/index.js';
+import { uploadRoutes } from '../modules/upload/upload.routes.js';
 
 const router = Router();
 
@@ -26,6 +28,10 @@ router.use('/settings', settingsRoutes);
 router.use('/roles', roleRoutes);
 router.use('/email-templates', emailTemplateRoutes);
 router.use('/campaigns', campaignRoutes);
+router.use('/menu', menuRoutes);
+router.use('/admin', menuRoutes);
+router.use('/upload', uploadRoutes);
+router.use('/admin/upload', uploadRoutes);
 
 export const apiRouter = router;
 

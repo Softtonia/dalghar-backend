@@ -5,13 +5,16 @@ export type UserRole =
   | 'RESTAURANT_ADMIN'
   | 'BRANCH_MANAGER'
   | 'CASHIER'
-  | 'KITCHEN_STAFF';
+  | 'KITCHEN_STAFF'
+  | (string & {});
 
 export interface IUser extends Document {
   name: string;
+  firstName?: string;
+  lastName?: string;
   email: string;
   passwordHash?: string;
-  role: UserRole;
+  role: string;
   restaurantId?: string | null;
   branchId?: string | null;
   permissions: string[];
@@ -26,8 +29,17 @@ const userSchema = new Schema<IUser>(
   {
     name: {
       type: String,
-      required: [true, 'Name is required'],
       trim: true,
+    },
+    firstName: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    lastName: {
+      type: String,
+      trim: true,
+      default: '',
     },
     email: {
       type: String,
@@ -44,7 +56,6 @@ const userSchema = new Schema<IUser>(
     },
     role: {
       type: String,
-      enum: ['SUPER_ADMIN', 'RESTAURANT_ADMIN', 'BRANCH_MANAGER', 'CASHIER', 'KITCHEN_STAFF'],
       default: 'CASHIER',
     },
     restaurantId: {

@@ -43,6 +43,41 @@ const DEFAULT_SYSTEM_TEMPLATES = [
 <p style="font-size: 13px; color: #64748B;">If you have any questions or need support, reach out to our team at <strong>dalgharsupport@yopmail.com</strong>.</p>`,
   },
   {
+    name: 'User Account Created (Welcome Credentials)',
+    key: 'add_user',
+    subject: '[Welcome to Dal Ghar] Your User Account Credentials ({{roleName}})',
+    description: 'Automated notification dispatched when an administrator provisions a new user with their assigned restaurant, branch, role, and temporary password.',
+    variables: ['userName', 'email', 'roleName', 'restaurantName', 'branchName', 'tempPassword', 'loginUrl'],
+    isSystem: true,
+    isActive: true,
+    bodyHtml: `<p>Hello <strong>{{userName}}</strong>,</p>
+<p>An administrator has created a user account for you on the <strong>Dal Ghar Management Portal</strong> with the role and branch assignments below:</p>
+
+<div class="card-box">
+  <div style="font-weight: 700; color: #1B4D2E; margin-bottom: 12px; font-size: 15px; border-bottom: 1px solid #E2E8F0; padding-bottom: 6px;">
+    Account & Assignment Details
+  </div>
+  <div class="row"><span class="label">Full Name:</span><span class="val">{{userName}}</span></div>
+  <div class="row"><span class="label">Login Email:</span><span class="val">{{email}}</span></div>
+  <div class="row"><span class="label">Assigned Role:</span><span class="val" style="color: #1B4D2E; font-weight: 700;">{{roleName}}</span></div>
+  <div class="row"><span class="label">Restaurant:</span><span class="val">{{restaurantName}}</span></div>
+  <div class="row"><span class="label">Branch Outlet:</span><span class="val">{{branchName}}</span></div>
+  <div class="row"><span class="label">Account Status:</span><span class="val" style="color: #16A34A; font-weight: 700;">● Active</span></div>
+  <div class="row" style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed #E2E8F0;">
+    <span class="label">Temporary Password:</span>
+    <span class="val" style="font-family: monospace; font-size: 14px; background: #E2E8F0; padding: 2px 8px; border-radius: 4px;">{{tempPassword}}</span>
+  </div>
+</div>
+
+<div class="btn-container">
+  <a href="{{loginUrl}}" class="btn" target="_blank">Sign In to Dal Ghar Dashboard &rarr;</a>
+</div>
+
+<p style="font-size: 12px; color: #64748B; margin-top: 18px;">
+  For security, please log in and change your password immediately upon your first sign in.
+</p>`,
+  },
+  {
     name: 'Password Reset Request',
     key: 'forget_password',
     subject: 'Reset Your Password - Dal Ghar',
@@ -84,37 +119,157 @@ const DEFAULT_SYSTEM_TEMPLATES = [
   {
     name: 'New Restaurant Added',
     key: 'add_restaurant',
-    subject: 'New Restaurant Added: {{restaurantName}} - Dal Ghar',
-    description: 'Notification dispatched when a new restaurant branch brand is registered.',
-    variables: ['restaurantName', 'restaurantCode', 'city', 'portalUrl'],
+    subject: 'New Restaurant Brand Onboarded: {{restaurantName}} - Dal Ghar',
+    description: 'Notification dispatched when a new restaurant brand entity is registered.',
+    variables: ['restaurantName', 'restaurantCode', 'city', 'phone', 'portalUrl', 'createdAt'],
     isSystem: true,
     isActive: true,
-    bodyHtml: `<p>A new restaurant has been successfully added to the Dal Ghar management platform:</p>
+    bodyHtml: `<p>A new restaurant brand has been successfully registered on the Dal Ghar management platform:</p>
 <div class="card-box">
-  <div class="row"><span class="label">Brand Name:</span><span class="val">{{restaurantName}}</span></div>
+  <div class="row"><span class="label">Restaurant Name:</span><span class="val"><strong>{{restaurantName}}</strong></span></div>
   <div class="row"><span class="label">Brand Code:</span><span class="val">{{restaurantCode}}</span></div>
-  <div class="row"><span class="label">City:</span><span class="val">{{city}}</span></div>
+  <div class="row"><span class="label">City / State:</span><span class="val">{{city}}</span></div>
+  <div class="row"><span class="label">Contact Phone:</span><span class="val">{{phone}}</span></div>
+  <div class="row"><span class="label">Registration Date:</span><span class="val">{{createdAt}}</span></div>
 </div>
 <div class="btn-container">
-  <a href="{{portalUrl}}" class="btn" target="_blank">View Restaurant Details &rarr;</a>
-</div>`,
+  <a href="{{portalUrl}}" class="btn" target="_blank">View Restaurant In Portal &rarr;</a>
+</div>
+<p style="font-size: 13px; color: #64748B;">You can now configure branches, menus, and staff roles for this restaurant.</p>`,
+  },
+  {
+    name: 'Restaurant Details Updated',
+    key: 'update_restaurant',
+    subject: 'Restaurant Profile Updated: {{restaurantName}} - Dal Ghar',
+    description: 'Notification dispatched when restaurant operational, contact, or business configurations are updated.',
+    variables: ['restaurantName', 'restaurantCode', 'updatedBy', 'updatedAt', 'portalUrl'],
+    isSystem: true,
+    isActive: true,
+    bodyHtml: `<p>The profile and configuration details for <strong>{{restaurantName}}</strong> have been updated:</p>
+<div class="card-box">
+  <div class="row"><span class="label">Restaurant:</span><span class="val"><strong>{{restaurantName}}</strong> ({{restaurantCode}})</span></div>
+  <div class="row"><span class="label">Updated By:</span><span class="val">{{updatedBy}}</span></div>
+  <div class="row"><span class="label">Timestamp:</span><span class="val">{{updatedAt}}</span></div>
+  <div class="row"><span class="label">Status:</span><span class="val" style="color: #0284C7;">● Profile Modified</span></div>
+</div>
+<div class="btn-container">
+  <a href="{{portalUrl}}" class="btn" target="_blank">Review Updated Details &rarr;</a>
+</div>
+<p style="font-size: 13px; color: #64748B;">If you did not authorize these changes, please check your administrative audit log immediately.</p>`,
+  },
+  {
+    name: 'Restaurant Deactivated / Suspended',
+    key: 'deactivate_restaurant',
+    subject: 'Important: Restaurant {{restaurantName}} Has Been Deactivated',
+    description: 'Alert sent when a restaurant brand is paused, suspended, or marked inactive.',
+    variables: ['restaurantName', 'restaurantCode', 'actionBy', 'reason', 'timestamp', 'supportEmail'],
+    isSystem: true,
+    isActive: true,
+    bodyHtml: `<p>This notice confirms that the operating status of restaurant <strong>{{restaurantName}}</strong> has been changed to <strong style="color: #DC2626;">INACTIVE</strong>.</p>
+<div class="card-box" style="border-left: 4px solid #DC2626;">
+  <div class="row"><span class="label">Restaurant:</span><span class="val">{{restaurantName}} ({{restaurantCode}})</span></div>
+  <div class="row"><span class="label">Current Status:</span><span class="val" style="color: #DC2626; font-weight: 700;">INACTIVE / SUSPENDED</span></div>
+  <div class="row"><span class="label">Action Taken By:</span><span class="val">{{actionBy}}</span></div>
+  <div class="row"><span class="label">Effective Date:</span><span class="val">{{timestamp}}</span></div>
+  <div class="row"><span class="label">Reason / Notes:</span><span class="val">{{reason}}</span></div>
+</div>
+<p style="font-size: 13px; color: #475569; margin-top: 16px;">While inactive, public ordering, POS billing, and branch operational sync for this brand are temporarily halted.</p>
+<p style="font-size: 13px; color: #64748B;">To reactivate or appeal, contact senior administration at <strong>{{supportEmail}}</strong>.</p>`,
+  },
+  {
+    name: 'Restaurant Deleted Permanently',
+    key: 'delete_restaurant',
+    subject: 'Notice: Restaurant {{restaurantName}} Removed from Dal Ghar',
+    description: 'Notification triggered when a restaurant entity has been permanently removed.',
+    variables: ['restaurantName', 'restaurantCode', 'deletedBy', 'timestamp'],
+    isSystem: true,
+    isActive: true,
+    bodyHtml: `<p>The restaurant record for <strong>{{restaurantName}}</strong> has been removed from the platform:</p>
+<div class="card-box" style="border-left: 4px solid #B91C1C;">
+  <div class="row"><span class="label">Restaurant Name:</span><span class="val">{{restaurantName}}</span></div>
+  <div class="row"><span class="label">Brand Code:</span><span class="val">{{restaurantCode}}</span></div>
+  <div class="row"><span class="label">Deleted By:</span><span class="val">{{deletedBy}}</span></div>
+  <div class="row"><span class="label">Deleted At:</span><span class="val">{{timestamp}}</span></div>
+</div>
+<p style="font-size: 13px; color: #64748B;">All associated historical audit events have been archived in accordance with standard compliance retention policies.</p>`,
   },
   {
     name: 'New Branch Outlet Added',
     key: 'add_branch',
     subject: 'New Branch Outlet Registered: {{branchName}} ({{branchCode}})',
-    description: 'Dispatched when an outlet or cloud kitchen is opened under a brand.',
-    variables: ['branchName', 'branchCode', 'type', 'city', 'managerName'],
+    description: 'Dispatched when an outlet, dine-in branch, or cloud kitchen is opened under a brand.',
+    variables: ['restaurantName', 'branchName', 'branchCode', 'type', 'city', 'managerName', 'seatingCapacity', 'portalUrl'],
     isSystem: true,
     isActive: true,
-    bodyHtml: `<p>A new physical branch outlet has been registered in the system:</p>
+    bodyHtml: `<p>A new physical outlet branch has been registered and activated for <strong>{{restaurantName}}</strong>:</p>
 <div class="card-box">
+  <div class="row"><span class="label">Brand:</span><span class="val">{{restaurantName}}</span></div>
+  <div class="row"><span class="label">Branch Name:</span><span class="val"><strong>{{branchName}}</strong></span></div>
+  <div class="row"><span class="label">Branch Code:</span><span class="val">{{branchCode}}</span></div>
+  <div class="row"><span class="label">Outlet Type:</span><span class="val">{{type}}</span></div>
+  <div class="row"><span class="label">City:</span><span class="val">{{city}}</span></div>
+  <div class="row"><span class="label">Manager In-Charge:</span><span class="val">{{managerName}}</span></div>
+  <div class="row"><span class="label">Seating Capacity:</span><span class="val">{{seatingCapacity}} Seats</span></div>
+</div>
+<div class="btn-container">
+  <a href="{{portalUrl}}" class="btn" target="_blank">Manage Branch & Floor Tables &rarr;</a>
+</div>`,
+  },
+  {
+    name: 'Branch Details Updated',
+    key: 'update_branch',
+    subject: 'Branch Outlet Updated: {{branchName}} - Dal Ghar',
+    description: 'Notification triggered when branch operating hours, seating, contact, or location are updated.',
+    variables: ['restaurantName', 'branchName', 'branchCode', 'updatedBy', 'updatedAt', 'portalUrl'],
+    isSystem: true,
+    isActive: true,
+    bodyHtml: `<p>Branch information for <strong>{{branchName}}</strong> under <strong>{{restaurantName}}</strong> has been updated:</p>
+<div class="card-box">
+  <div class="row"><span class="label">Branch:</span><span class="val"><strong>{{branchName}}</strong> ({{branchCode}})</span></div>
+  <div class="row"><span class="label">Parent Brand:</span><span class="val">{{restaurantName}}</span></div>
+  <div class="row"><span class="label">Updated By:</span><span class="val">{{updatedBy}}</span></div>
+  <div class="row"><span class="label">Timestamp:</span><span class="val">{{updatedAt}}</span></div>
+</div>
+<div class="btn-container">
+  <a href="{{portalUrl}}" class="btn" target="_blank">View Branch Details &rarr;</a>
+</div>`,
+  },
+  {
+    name: 'Branch Outlet Deactivated / Closed',
+    key: 'deactivate_branch',
+    subject: 'Branch Operational Alert: {{branchName}} Marked Inactive / Closed',
+    description: 'Dispatched when a branch outlet is temporarily closed, put into renovation, or marked inactive.',
+    variables: ['restaurantName', 'branchName', 'branchCode', 'status', 'actionBy', 'timestamp', 'reason'],
+    isSystem: true,
+    isActive: true,
+    bodyHtml: `<p>Attention: Branch outlet <strong>{{branchName}}</strong> has been marked as <strong style="color: #D97706;">{{status}}</strong>.</p>
+<div class="card-box" style="border-left: 4px solid #D97706;">
+  <div class="row"><span class="label">Branch Name:</span><span class="val">{{branchName}} ({{branchCode}})</span></div>
+  <div class="row"><span class="label">Restaurant:</span><span class="val">{{restaurantName}}</span></div>
+  <div class="row"><span class="label">Operating Status:</span><span class="val" style="color: #D97706; font-weight: 700;">{{status}}</span></div>
+  <div class="row"><span class="label">Action By:</span><span class="val">{{actionBy}}</span></div>
+  <div class="row"><span class="label">Effective Time:</span><span class="val">{{timestamp}}</span></div>
+  <div class="row"><span class="label">Notes / Reason:</span><span class="val">{{reason}}</span></div>
+</div>
+<p style="font-size: 13px; color: #475569; margin-top: 14px;">Orders and table reservations are currently paused for this outlet location.</p>`,
+  },
+  {
+    name: 'Branch Outlet Deleted Permanently',
+    key: 'delete_branch',
+    subject: 'Branch Removed: {{branchName}} ({{branchCode}})',
+    description: 'Notification dispatched when a branch outlet is deleted from the restaurant group.',
+    variables: ['restaurantName', 'branchName', 'branchCode', 'deletedBy', 'timestamp'],
+    isSystem: true,
+    isActive: true,
+    bodyHtml: `<p>The outlet record for <strong>{{branchName}}</strong> has been deleted from <strong>{{restaurantName}}</strong>:</p>
+<div class="card-box" style="border-left: 4px solid #B91C1C;">
   <div class="row"><span class="label">Branch Name:</span><span class="val">{{branchName}}</span></div>
   <div class="row"><span class="label">Branch Code:</span><span class="val">{{branchCode}}</span></div>
-  <div class="row"><span class="label">Type:</span><span class="val">{{type}}</span></div>
-  <div class="row"><span class="label">City:</span><span class="val">{{city}}</span></div>
-  <div class="row"><span class="label">Manager:</span><span class="val">{{managerName}}</span></div>
-</div>`,
+  <div class="row"><span class="label">Parent Brand:</span><span class="val">{{restaurantName}}</span></div>
+  <div class="row"><span class="label">Deleted By:</span><span class="val">{{deletedBy}}</span></div>
+  <div class="row"><span class="label">Timestamp:</span><span class="val">{{timestamp}}</span></div>
+</div>
+<p style="font-size: 13px; color: #64748B;">Assigned floor tables, KOT printers, and branch POS instances have been detached.</p>`,
   },
 ];
 

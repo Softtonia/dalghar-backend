@@ -2,10 +2,15 @@ import express, { Application } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { config } from './config/env.js';
 import { apiRouter } from './routes/index.js';
 import { notFoundHandler } from './middleware/notFound.middleware.js';
 import { errorHandler } from './middleware/error.middleware.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export const createApp = (): Application => {
   const app: Application = express();
@@ -45,9 +50,11 @@ export const createApp = (): Application => {
   // Cookie parser
   app.use(cookieParser());
 
-  // Body parser
-  app.use(express.json());
-  app.use(express.urlencoded({ extended: true }));
+  // Body parser (allow large payloads for base64 logos and rich templates)
+  app.use(express.json({ limit: '50mb' }));
+  // Serve uploaded images statically
+  const uploadsStaticPath = path.resolve(__dirname, '../public/uploads');
+  app.use('/uploads', express.static(uploadsStaticPath));
 
   // API Routes
   app.use('/api', apiRouter);
