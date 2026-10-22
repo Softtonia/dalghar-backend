@@ -9,6 +9,7 @@ import { emailTemplateRoutes } from '../modules/email-templates/email-template.r
 import { campaignRoutes } from '../modules/campaigns/campaign.routes.js';
 import { menuRoutes } from '../modules/menu/index.js';
 import { uploadRoutes } from '../modules/upload/upload.routes.js';
+import { posRoutes } from '../modules/pos/pos.routes.js';
 
 const router = Router();
 
@@ -32,6 +33,8 @@ router.use('/menu', menuRoutes);
 router.use('/admin', menuRoutes);
 router.use('/upload', uploadRoutes);
 router.use('/admin/upload', uploadRoutes);
+router.use('/pos', posRoutes);
+router.use('/admin/pos', posRoutes);
 
 export const apiRouter = router;
 

@@ -54,7 +54,7 @@ export const errorHandler = (
     const duplicateValue = err.keyValue ? err.keyValue[duplicateField] : '';
     res.status(409).json({
       success: false,
-      message: `Conflict: A restaurant with this ${duplicateField} ("${duplicateValue}") already exists.`,
+      message: `Conflict: A record with this ${duplicateField} ("${duplicateValue}") already exists.`,
     });
     return;
   }

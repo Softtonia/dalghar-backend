@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { connectDatabase } from '../config/database.js';
 import { seedSuperAdmin } from './seeders/admin.seeder.js';
 import { seedDefaultRoles } from './seeders/role.seeder.js';
+import { seedPeripherals } from './seeders/peripherals.seeder.js';
 import { EmailTemplateService } from '../modules/email-templates/email-template.service.js';
 
 const runSeed = async (): Promise<void> => {
@@ -11,6 +12,7 @@ const runSeed = async (): Promise<void> => {
 
     await seedSuperAdmin();
     await seedDefaultRoles();
+    await seedPeripherals();
     await EmailTemplateService.seedDefaultTemplates();
 
     console.log('Database seeding completed.');

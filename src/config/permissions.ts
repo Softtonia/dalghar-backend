@@ -26,6 +26,7 @@ export const PERMISSIONS = {
   POS_VIEW: 'pos.view',
   POS_CREATE_ORDER: 'pos.create_order',
   POS_PAYMENT: 'pos.payment',
+  POS_AUDIT_READ: 'pos.audit.read',
 
   INVENTORY_VIEW: 'inventory.view',
   INVENTORY_MANAGE: 'inventory.manage',
@@ -73,6 +74,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     PERMISSIONS.STAFF_MANAGE,
     PERMISSIONS.REPORT_VIEW,
     PERMISSIONS.SETTINGS_VIEW,
+    PERMISSIONS.POS_AUDIT_READ,
   ],
   BRANCH_MANAGER: [
     PERMISSIONS.DASHBOARD_VIEW,
@@ -87,6 +89,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     PERMISSIONS.TABLE_VIEW,
     PERMISSIONS.TABLE_MANAGE,
     PERMISSIONS.REPORT_VIEW,
+    PERMISSIONS.POS_AUDIT_READ,
   ],
   CASHIER: [
     PERMISSIONS.DASHBOARD_VIEW,
