@@ -3,6 +3,9 @@ import { connectDatabase } from '../config/database.js';
 import { seedSuperAdmin } from './seeders/admin.seeder.js';
 import { seedDefaultRoles } from './seeders/role.seeder.js';
 import { seedPeripherals } from './seeders/peripherals.seeder.js';
+import { seedMenuAndCatalog } from './seeders/menu.seeder.js';
+import { seedDiningAreasAndTables } from './seeders/dining.seeder.js';
+import { seedReservationsAndWaitingList } from './seeders/reservation.seeder.js';
 import { EmailTemplateService } from '../modules/email-templates/email-template.service.js';
 
 const runSeed = async (): Promise<void> => {
@@ -13,6 +16,9 @@ const runSeed = async (): Promise<void> => {
     await seedSuperAdmin();
     await seedDefaultRoles();
     await seedPeripherals();
+    await seedMenuAndCatalog();
+    await seedDiningAreasAndTables();
+    await seedReservationsAndWaitingList();
     await EmailTemplateService.seedDefaultTemplates();
 
     console.log('Database seeding completed.');

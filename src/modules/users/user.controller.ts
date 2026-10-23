@@ -1,7 +1,13 @@
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../../middleware/auth.middleware.js';
 import { UserService } from './user.service.js';
-import { createUserSchema, updateUserSchema, listUserQuerySchema } from './user.schemas.js';
+import {
+  createUserSchema,
+  updateUserSchema,
+  listUserQuerySchema,
+  assignUserRolesSchema,
+  updateUserPermissionsSchema,
+} from './user.schemas.js';
 
 export class UserController {
   /**
@@ -81,6 +87,76 @@ export class UserController {
       res.status(200).json({
         success: true,
         message: result.message,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * GET /api/users/:id/roles
+   */
+  static getUserRoles = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : (req.params.id as string);
+      const roles = await UserService.getUserRoles(id);
+      res.status(200).json({
+        success: true,
+        data: roles,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * PUT /api/users/:id/roles
+   */
+  static updateUserRoles = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : (req.params.id as string);
+      const body = assignUserRolesSchema.parse(req.body);
+      const user = await UserService.updateUserRoles(id, body.roleIds, req.user?.userId);
+      res.status(200).json({
+        success: true,
+        data: user,
+        message: 'User roles updated successfully.',
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * GET /api/users/:id/permissions
+   */
+  static getUserPermissions = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : (req.params.id as string);
+      const permissions = await UserService.getUserPermissions(id);
+      res.status(200).json({
+        success: true,
+        data: permissions,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * PUT /api/users/:id/permissions
+   */
+  static updateUserPermissions = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : (req.params.id as string);
+      const body = updateUserPermissionsSchema.parse(req.body);
+      const permsPayload = body.permissions || body.directPermissions || [];
+      const result = await UserService.updateUserPermissions(id, permsPayload);
+      res.status(200).json({
+        success: true,
+        data: result,
+        user: result,
+        message: 'User permissions updated successfully.',
       });
     } catch (error) {
       next(error);

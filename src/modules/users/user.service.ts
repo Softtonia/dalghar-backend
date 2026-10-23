@@ -6,10 +6,14 @@ import { UserHasRole } from '../../models/UserHasRole.js';
 import { Restaurant } from '../../models/Restaurant.js';
 import { Branch } from '../../models/Branch.js';
 import { ApiError } from '../../utils/ApiError.js';
-import { CreateUserInput, UpdateUserInput, ListUserQueryInput } from './user.schemas.js';
+import {
+  CreateUserInput,
+  UpdateUserInput,
+  ListUserQueryInput,
+} from './user.schemas.js';
 import { MailService } from '../../services/mail.service.js';
 import { config } from '../../config/env.js';
-import { ROLE_PERMISSIONS } from '../../config/permissions.js';
+import { calculateUserEffectivePermissions } from '../../utils/permissionUtils.js';
 
 export class UserService {
   /**
@@ -18,38 +22,8 @@ export class UserService {
   private static async enrichUser(user: IUser) {
     const json = user.toJSON ? user.toJSON() : (user as any);
 
-    // Fetch dynamic role assignment
-    let userRoleAssignment = await UserHasRole.findOne({ userId: user._id }).populate('roleId');
-    let dynamicRole = userRoleAssignment?.roleId as any;
-
-    // If no junction record exists yet, try looking up a matching Role in DB by slug
-    if (!dynamicRole && user.role) {
-      const slugCandidate = user.role.toLowerCase().replace(/_/g, '-');
-      const matched = await Role.findOne({
-        $or: [
-          { slug: slugCandidate },
-          { slug: user.role.toLowerCase() },
-          { name: new RegExp(`^${user.role.replace(/_/g, ' ')}$`, 'i') },
-        ],
-      });
-      if (matched) {
-        dynamicRole = matched;
-        // Self-heal junction table asynchronously
-        UserHasRole.findOneAndUpdate(
-          { userId: user._id, roleId: matched._id },
-          { userId: user._id, roleId: matched._id },
-          { upsert: true, returnDocument: 'after' }
-        ).catch(() => {});
-      }
-    }
-
-    // Compute effective permissions (stored permissions + dynamic role permissions + role permissions)
-    const storedPerms: string[] = Array.isArray(user.permissions) ? user.permissions : [];
-    const dynamicPerms: string[] = dynamicRole && Array.isArray(dynamicRole.permissions) ? dynamicRole.permissions : [];
-    const roleKey = (user.role?.toUpperCase().replace(/-/g, '_')) as keyof typeof ROLE_PERMISSIONS;
-    const staticPerms: string[] = ROLE_PERMISSIONS[roleKey] || [];
-
-    const effectivePermissions = Array.from(new Set([...storedPerms, ...dynamicPerms, ...staticPerms]));
+    // Compute authoritative effective permissions, inherited permissions, and assigned roles
+    const permResult = await calculateUserEffectivePermissions(user);
 
     // Fetch Restaurant Details
     let restaurantObj: any = null;
@@ -71,16 +45,24 @@ export class UserService {
       }
     }
 
+    const primaryRole = permResult.roles[0] || null;
+
     return {
       ...json,
-      permissions: effectivePermissions,
-      assignedRole: dynamicRole
+      roles: permResult.roles,
+      assignedRole: primaryRole
         ? {
-            id: dynamicRole._id?.toString() || dynamicRole.id,
-            name: dynamicRole.name,
-            slug: dynamicRole.slug,
+            id: primaryRole.id,
+            name: primaryRole.name,
+            slug: primaryRole.slug,
           }
         : null,
+      permissions: permResult.effectivePermissions,
+      inheritedPermissions: permResult.inheritedPermissions,
+      directAllows: [],
+      directDenials: [],
+      directPermissions: [],
+      terminalId: user.terminalId || null,
       restaurant: restaurantObj
         ? {
             id: restaurantObj._id?.toString() || restaurantObj.id,
@@ -115,7 +97,10 @@ export class UserService {
     }
 
     if (params.role) {
-      query.role = params.role;
+      query.$or = [
+        { role: params.role },
+        { roles: params.role },
+      ];
     }
 
     if (params.restaurantId) {
@@ -191,25 +176,16 @@ export class UserService {
       branchName = branch.name;
     }
 
-    // Determine role name, dynamic role, and permissions
-    let roleName = input.role.replace(/_/g, ' ');
-    let assignedRoleId: string | null = null;
-    let initialPermissions: string[] = [];
-
-    // 1. If explicit roleId is provided, look it up
-    if (input.roleId) {
-      const dynamicRole = await Role.findById(input.roleId);
-      if (dynamicRole) {
-        roleName = dynamicRole.name;
-        assignedRoleId = dynamicRole._id.toString();
-        if (Array.isArray(dynamicRole.permissions)) {
-          initialPermissions = [...dynamicRole.permissions];
-        }
-      }
+    // Determine target roles (multi-select roleIds support)
+    const targetRoleIds: string[] = [];
+    if (Array.isArray(input.roleIds) && input.roleIds.length > 0) {
+      targetRoleIds.push(...input.roleIds);
+    } else if (input.roleId) {
+      targetRoleIds.push(input.roleId);
     }
 
-    // 2. If no roleId or permissions not yet found, try finding matching Role in database by slug or name
-    if (!assignedRoleId || initialPermissions.length === 0) {
+    // If still empty, attempt slug/name match
+    if (targetRoleIds.length === 0 && input.role) {
       const slugCandidate = input.role.toLowerCase().replace(/_/g, '-');
       const matchedRole = await Role.findOne({
         $or: [
@@ -218,21 +194,15 @@ export class UserService {
           { name: new RegExp(`^${input.role.replace(/_/g, ' ')}$`, 'i') },
         ],
       });
-
       if (matchedRole) {
-        if (!assignedRoleId) assignedRoleId = matchedRole._id.toString();
-        roleName = matchedRole.name;
-        if (Array.isArray(matchedRole.permissions) && matchedRole.permissions.length > 0) {
-          initialPermissions = Array.from(new Set([...initialPermissions, ...matchedRole.permissions]));
-        }
+        targetRoleIds.push(String(matchedRole._id));
       }
     }
 
-    // 3. Fallback to static ROLE_PERMISSIONS
-    const roleKey = (input.role.toUpperCase().replace(/-/g, '_')) as keyof typeof ROLE_PERMISSIONS;
-    if (ROLE_PERMISSIONS[roleKey]) {
-      initialPermissions = Array.from(new Set([...initialPermissions, ...ROLE_PERMISSIONS[roleKey]]));
-    }
+    const assignedRoles = targetRoleIds.length > 0 ? await Role.find({ _id: { $in: targetRoleIds } }) : [];
+    const primaryRole = assignedRoles[0];
+    const roleSlug = primaryRole ? primaryRole.slug.toUpperCase().replace(/-/g, '_') : input.role;
+    const roleName = primaryRole ? primaryRole.name : input.role.replace(/_/g, ' ');
 
     // Compute full name and individual names
     const firstName = (input.firstName || '').trim();
@@ -249,20 +219,23 @@ export class UserService {
       lastName,
       email: normalizedEmail,
       passwordHash,
-      role: input.role,
+      role: roleSlug,
+      roles: targetRoleIds,
       restaurantId: input.restaurantId || null,
       branchId: input.branchId || null,
-      permissions: initialPermissions,
+      terminalId: input.terminalId || null,
+      permissions: input.permissions || primaryRole?.permissions || [],
+      directPermissions: [],
       isActive: input.isActive !== undefined ? input.isActive : true,
     });
 
-    // Create UserHasRole link if role was identified
-    if (assignedRoleId) {
+    // Create UserHasRole link records for all selected roles
+    for (const roleId of targetRoleIds) {
       await UserHasRole.findOneAndUpdate(
-        { userId: user._id, roleId: assignedRoleId },
+        { userId: user._id, roleId },
         {
           userId: user._id,
-          roleId: assignedRoleId,
+          roleId,
           assignedBy: creatorUserId || null,
         },
         { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
@@ -325,6 +298,20 @@ export class UserService {
       throw ApiError.notFound('User not found');
     }
 
+    // Protect against self-deactivation or deactivation of the last super admin
+    if (input.isActive === false) {
+      if (user.role === 'SUPER_ADMIN') {
+        const otherActiveSuperAdmins = await User.countDocuments({
+          role: 'SUPER_ADMIN',
+          isActive: true,
+          _id: { $ne: id },
+        });
+        if (otherActiveSuperAdmins === 0) {
+          throw ApiError.badRequest('Cannot deactivate the last active Super Admin account.');
+        }
+      }
+    }
+
     if (input.email && input.email.toLowerCase().trim() !== user.email) {
       const existing = await User.findOne({
         email: input.email.toLowerCase().trim(),
@@ -345,37 +332,32 @@ export class UserService {
       user.name = `${user.firstName || ''} ${user.lastName || ''}`.trim();
     }
 
-    if (input.role) user.role = input.role;
     if (input.restaurantId !== undefined) user.restaurantId = input.restaurantId;
     if (input.branchId !== undefined) user.branchId = input.branchId;
-    if (typeof input.isActive === 'boolean') user.isActive = input.isActive;
+    if (input.terminalId !== undefined) user.terminalId = input.terminalId;
+    if (input.permissions !== undefined) {
+      user.permissions = Array.from(new Set(input.permissions.filter(Boolean)));
+      user.directPermissions = [];
+    } else if (input.directPermissions !== undefined) {
+      const cleanPerms: string[] = [];
+      input.directPermissions.forEach((item: any) => {
+        if (typeof item === 'string') cleanPerms.push(item);
+        else if (item && (!item.effect || item.effect === 'allow')) cleanPerms.push(item.permission);
+      });
+      user.permissions = Array.from(new Set(cleanPerms.filter(Boolean)));
+      user.directPermissions = [];
+    }
 
     if (input.password) {
       user.passwordHash = await bcrypt.hash(input.password, 10);
     }
 
-    await user.save();
-
-    // Update dynamic role assignment if roleId or role was passed
-    if (input.roleId !== undefined) {
-      if (input.roleId) {
-        const dynamicRole = await Role.findById(input.roleId);
-        if (dynamicRole && Array.isArray(dynamicRole.permissions)) {
-          user.permissions = Array.from(new Set(dynamicRole.permissions));
-          await user.save();
-        }
-        await UserHasRole.findOneAndUpdate(
-          { userId: user._id },
-          {
-            userId: user._id,
-            roleId: input.roleId,
-            assignedBy: modifierUserId || null,
-          },
-          { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
-        );
-      } else {
-        await UserHasRole.deleteMany({ userId: user._id });
-      }
+    // Role assignment logic (supporting roleIds array, roleId single, or role string)
+    let newRoleIds: string[] | null = null;
+    if (Array.isArray(input.roleIds)) {
+      newRoleIds = input.roleIds;
+    } else if (input.roleId !== undefined) {
+      newRoleIds = input.roleId ? [input.roleId] : [];
     } else if (input.role) {
       const slugCandidate = input.role.toLowerCase().replace(/_/g, '-');
       const matchedRole = await Role.findOne({
@@ -386,22 +368,35 @@ export class UserService {
         ],
       });
       if (matchedRole) {
-        if (Array.isArray(matchedRole.permissions)) {
-          user.permissions = Array.from(new Set(matchedRole.permissions));
-          await user.save();
-        }
-        await UserHasRole.findOneAndUpdate(
-          { userId: user._id },
-          {
-            userId: user._id,
-            roleId: matchedRole._id,
-            assignedBy: modifierUserId || null,
-          },
-          { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
-        );
+        newRoleIds = [String(matchedRole._id)];
       }
     }
 
+    if (newRoleIds !== null) {
+      user.roles = newRoleIds;
+      // Sync UserHasRole table
+      await UserHasRole.deleteMany({ userId: user._id });
+      for (const rId of newRoleIds) {
+        await UserHasRole.create({
+          userId: user._id,
+          roleId: rId,
+          assignedBy: modifierUserId || null,
+        });
+      }
+
+      // Update user primary role for backwards compatibility
+      const assignedRoleDocs = await Role.find({ _id: { $in: newRoleIds } });
+      if (assignedRoleDocs.length > 0) {
+        user.role = assignedRoleDocs[0].slug.toUpperCase().replace(/-/g, '_');
+        user.permissions = assignedRoleDocs[0].permissions || [];
+      } else if (input.role) {
+        user.role = input.role;
+      }
+    } else if (input.role) {
+      user.role = input.role;
+    }
+
+    await user.save();
     return await this.enrichUser(user);
   }
 
@@ -414,8 +409,116 @@ export class UserService {
       throw ApiError.notFound('User not found');
     }
 
-    await Promise.all([User.findByIdAndDelete(id), UserHasRole.deleteMany({ userId: id })]);
+    if (user.role === 'SUPER_ADMIN') {
+      const otherActiveSuperAdmins = await User.countDocuments({
+        role: 'SUPER_ADMIN',
+        isActive: true,
+        _id: { $ne: id },
+      });
+      if (otherActiveSuperAdmins === 0) {
+        throw ApiError.badRequest('Cannot delete the last remaining Super Admin account.');
+      }
+    }
+
+    await Promise.all([
+      User.findByIdAndDelete(id),
+      UserHasRole.deleteMany({ userId: id }),
+    ]);
 
     return { success: true, message: 'User deleted successfully' };
+  }
+
+  /**
+   * Get roles assigned to a user
+   */
+  static async getUserRoles(userId: string) {
+    const user = await User.findById(userId);
+    if (!user) throw ApiError.notFound('User not found');
+
+    const assignments = await UserHasRole.find({ userId: user._id }).populate('roleId');
+    return assignments.map((a: any) => a.roleId).filter(Boolean);
+  }
+
+  /**
+   * Replace all roles assigned to a user
+   */
+  static async updateUserRoles(userId: string, roleIds: string[], modifierUserId?: string) {
+    const user = await User.findById(userId);
+    if (!user) throw ApiError.notFound('User not found');
+
+    const validRoles = await Role.find({ _id: { $in: roleIds } });
+    if (validRoles.length !== roleIds.length) {
+      throw ApiError.badRequest('One or more selected role IDs are invalid.');
+    }
+
+    // Sync junction
+    await UserHasRole.deleteMany({ userId: user._id });
+    for (const rId of roleIds) {
+      await UserHasRole.create({
+        userId: user._id,
+        roleId: rId,
+        assignedBy: modifierUserId || null,
+      });
+    }
+
+    user.roles = roleIds;
+    if (validRoles.length > 0) {
+      user.role = validRoles[0].slug.toUpperCase().replace(/-/g, '_');
+      user.permissions = validRoles[0].permissions || [];
+    }
+    await user.save();
+
+    return await this.enrichUser(user);
+  }
+
+  /**
+   * Get direct & effective permissions for a user
+   */
+  static async getUserPermissions(userId: string) {
+    const user = await User.findById(userId);
+    if (!user) throw ApiError.notFound('User not found');
+
+    const permResult = await calculateUserEffectivePermissions(user);
+    return {
+      userId: String(user._id),
+      userName: user.name,
+      permissions: permResult.effectivePermissions,
+      effectivePermissions: permResult.effectivePermissions,
+      inheritedPermissions: permResult.inheritedPermissions,
+      directAllows: [],
+      directDenials: [],
+      directPermissions: [],
+      roles: permResult.roles,
+    };
+  }
+
+  /**
+   * Update permissions for a user
+   */
+  static async updateUserPermissions(
+    userId: string,
+    permissionsInput?: any
+  ) {
+    const user = await User.findById(userId);
+    if (!user) throw ApiError.notFound('User not found');
+
+    const cleanPerms: string[] = [];
+    if (Array.isArray(permissionsInput)) {
+      permissionsInput.forEach((item) => {
+        if (typeof item === 'string') {
+          cleanPerms.push(item.trim());
+        } else if (item && typeof item === 'object') {
+          if (!item.effect || item.effect === 'allow') {
+            cleanPerms.push(item.permission?.trim());
+          }
+        }
+      });
+    }
+
+    user.permissions = Array.from(new Set(cleanPerms.filter(Boolean)));
+    user.directPermissions = [];
+    await user.save();
+
+    return await this.enrichUser(user);
   }
 }

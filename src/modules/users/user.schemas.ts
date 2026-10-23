@@ -1,5 +1,10 @@
 import { z } from 'zod';
 
+export const directPermissionSchema = z.object({
+  permission: z.string().trim().min(1),
+  effect: z.enum(['allow', 'deny']).default('allow'),
+});
+
 export const createUserSchema = z.object({
   firstName: z.string().trim().min(1, 'First name is required').max(60),
   lastName: z.string().trim().max(60).optional().default(''),
@@ -7,9 +12,13 @@ export const createUserSchema = z.object({
   email: z.string().trim().email('Valid email address is required').toLowerCase(),
   password: z.string().min(6, 'Password must be at least 6 characters').optional(),
   role: z.string().trim().min(1, 'Role is required').default('CASHIER'),
-  roleId: z.string().optional(), // Dynamic Role ID from Role collection
+  roleId: z.string().optional(),
+  roleIds: z.array(z.string()).optional(),
   restaurantId: z.string().nullable().optional(),
   branchId: z.string().nullable().optional(),
+  terminalId: z.string().nullable().optional(),
+  permissions: z.array(z.string()).optional(),
+  directPermissions: z.union([z.array(z.string()), z.array(directPermissionSchema)]).optional(),
   isActive: z.boolean().default(true),
 });
 
@@ -21,9 +30,22 @@ export const updateUserSchema = z.object({
   password: z.string().min(6).optional(),
   role: z.string().trim().min(1).optional(),
   roleId: z.string().nullable().optional(),
+  roleIds: z.array(z.string()).optional(),
   restaurantId: z.string().nullable().optional(),
   branchId: z.string().nullable().optional(),
+  terminalId: z.string().nullable().optional(),
+  permissions: z.array(z.string()).optional(),
+  directPermissions: z.union([z.array(z.string()), z.array(directPermissionSchema)]).optional(),
   isActive: z.boolean().optional(),
+});
+
+export const assignUserRolesSchema = z.object({
+  roleIds: z.array(z.string()),
+});
+
+export const updateUserPermissionsSchema = z.object({
+  permissions: z.array(z.string()).optional(),
+  directPermissions: z.union([z.array(z.string()), z.array(directPermissionSchema)]).optional(),
 });
 
 export const listUserQuerySchema = z.object({
@@ -46,3 +68,5 @@ export const listUserQuerySchema = z.object({
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 export type ListUserQueryInput = z.infer<typeof listUserQuerySchema>;
+export type AssignUserRolesInput = z.infer<typeof assignUserRolesSchema>;
+export type UpdateUserPermissionsInput = z.infer<typeof updateUserPermissionsSchema>;

@@ -17,7 +17,10 @@ export interface IUser extends Document {
   role: string;
   restaurantId?: string | null;
   branchId?: string | null;
+  roles?: string[];
+  terminalId?: string | null;
   permissions: string[];
+  directPermissions?: Array<{ permission: string; effect: 'allow' | 'deny' }>;
   isActive: boolean;
   resetPasswordOtp?: string | null;
   resetPasswordExpires?: Date | null;
@@ -58,6 +61,10 @@ const userSchema = new Schema<IUser>(
       type: String,
       default: 'CASHIER',
     },
+    roles: {
+      type: [String],
+      default: [],
+    },
     restaurantId: {
       type: String,
       default: null,
@@ -66,10 +73,21 @@ const userSchema = new Schema<IUser>(
       type: String,
       default: null,
     },
+    terminalId: {
+      type: String,
+      default: null,
+    },
     permissions: {
       type: [String],
       default: [],
     },
+    directPermissions: [
+      {
+        _id: false,
+        permission: { type: String, required: true },
+        effect: { type: String, enum: ['allow', 'deny'], default: 'allow' },
+      },
+    ],
     isActive: {
       type: Boolean,
       default: true,

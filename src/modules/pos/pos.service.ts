@@ -19,6 +19,8 @@ import { PosTerminalAuditLog, sanitizeAuditData, PosAuditOutcome } from '../../m
 import { Restaurant } from '../../models/Restaurant.js';
 import { Branch } from '../../models/Branch.js';
 import { User } from '../../models/User.js';
+import { DiningTable } from '../../models/DiningTable.js';
+import { DiningTableStatusHistory } from '../../models/DiningTableStatusHistory.js';
 import { ApiError } from '../../utils/ApiError.js';
 import {
   sanitizeTemplateContent,
@@ -148,252 +150,7 @@ export class PosService {
    * Seed demo data if collections are empty so users see real data right away
    */
   static async seedDemoDataIfEmpty(): Promise<void> {
-    const orderCount = await PosOrder.countDocuments();
-    if (orderCount > 0) return;
-
-    const restaurant = await Restaurant.findOne();
-    const branch = await Branch.findOne();
-    const cashier = await User.findOne();
-
-    if (!restaurant || !branch || !cashier) return;
-
-    const cashierDisplayName = cashier.name || `${cashier.firstName || ''} ${cashier.lastName || ''}`.trim() || cashier.email || 'Cashier 1';
-
-    // 1. Find or Create Terminals safely
-    let t1 = await PosTerminal.findOne({ branch_id: branch._id, terminal_code: 'POS-01' });
-    if (!t1) {
-      t1 = await PosTerminal.create({
-        restaurant_id: branch.restaurantId,
-        branch_id: branch._id,
-        terminal_code: 'POS-01',
-        terminal_name: 'Counter Main POS 1',
-        name: 'Counter Main POS 1',
-        device_identifier: 'DEV-WIN11-TERMINAL-01',
-        device_type: 'desktop',
-        operating_system: 'Windows',
-        status: 'active',
-        last_seen_at: new Date(),
-        settings: {
-          printerType: 'thermal-80mm',
-          printerIp: '192.168.1.101',
-          autoPrintReceipt: true,
-          autoPrintKot: true,
-        },
-        created_by: cashier._id,
-      });
-    }
-
-    let t2 = await PosTerminal.findOne({ branch_id: branch._id, terminal_code: 'POS-02' });
-    if (!t2) {
-      t2 = await PosTerminal.create({
-        restaurant_id: branch.restaurantId,
-        branch_id: branch._id,
-        terminal_code: 'POS-02',
-        terminal_name: 'Takeaway Express POS 2',
-        name: 'Takeaway Express POS 2',
-        device_identifier: 'DEV-SUNMI-V2PRO-02',
-        device_type: 'mobile',
-        operating_system: 'Android',
-        status: 'active',
-        last_seen_at: new Date(),
-        settings: {
-          printerType: 'thermal-58mm',
-          autoPrintReceipt: true,
-        },
-        created_by: cashier._id,
-      });
-    }
-
-    // 2. Terminal Assignments
-    const existingAssignment = await PosTerminalAssignment.findOne({ terminal_id: t1._id, user_id: cashier._id });
-    if (!existingAssignment) {
-      await PosTerminalAssignment.create({
-        terminal_id: t1._id,
-        user_id: cashier._id,
-        assigned_by: cashier._id,
-        assigned_at: new Date(),
-      });
-    }
-
-    // 3. Cashier Shifts
-    let shift1 = await CashierShift.findOne({ terminal_id: t1._id, shift_number: 'SHIFT-101' });
-    if (!shift1) {
-      shift1 = await CashierShift.create({
-        branch_id: branch._id,
-        terminal_id: t1._id,
-        cashier_id: cashier._id,
-        shift_number: 'SHIFT-101',
-        opened_at: new Date(Date.now() - 4 * 3600 * 1000),
-        opening_cash: 5000,
-        expected_cash: 17850,
-        status: 'open',
-        opened_by: cashier._id,
-      });
-    }
-
-    // Legacy PosShift compatibility
-    const existingPosShift = await PosShift.findOne({ shiftNumber: 'SHIFT-101' });
-    if (!existingPosShift) {
-      await PosShift.create({
-        shiftNumber: 'SHIFT-101',
-        restaurantId: restaurant._id,
-        branchId: branch._id,
-        terminalId: t1.terminal_code,
-        terminalName: t1.name,
-        cashierId: cashier._id,
-        cashierName: cashierDisplayName,
-        status: 'OPEN',
-        startTime: new Date(Date.now() - 4 * 3600 * 1000),
-        openingCash: 5000,
-        expectedCash: 17850,
-        actualCash: 17700,
-        cashVariance: -150,
-        totalCardSales: 18450,
-        totalUpiSales: 24300,
-        totalCashSales: 12850,
-        totalSales: 55600,
-        orderCount: 42,
-      });
-    }
-
-    // Sample Orders
-    const dishes = [
-      { id: '1', name: 'Dal Ghar Special Makhani', price: 280 },
-      { id: '2', name: 'Shahi Paneer Tikka Masala', price: 320 },
-      { id: '3', name: 'Garlic Butter Naan', price: 65 },
-      { id: '4', name: 'Jeera Basmati Rice', price: 160 },
-      { id: '5', name: 'Rajasthani Baati Churma Thali', price: 450 },
-      { id: '6', name: 'Kesar Pista Malai Kulfi', price: 110 },
-      { id: '7', name: 'Masala Chaas', price: 50 },
-    ];
-
-    const methods: ('CASH' | 'UPI' | 'CARD')[] = ['UPI', 'CASH', 'CARD', 'UPI', 'UPI'];
-    const now = new Date();
-    const dateStr = formatDateToIso(now).replace(/-/g, '');
-
-    for (let i = 1; i <= 24; i++) {
-      const d1 = dishes[Math.floor(Math.random() * dishes.length)];
-      const d2 = dishes[Math.floor(Math.random() * dishes.length)];
-      const subtotal = d1.price * 2 + d2.price;
-      const tax = Math.round(subtotal * 0.05);
-      const discount = i % 5 === 0 ? 50 : 0;
-      const total = subtotal + tax - discount;
-      const isPending = i === 1 || i === 4;
-      const orderTime = new Date(now.getTime() - i * 18 * 60 * 1000);
-
-      await PosOrder.create({
-        orderNumber: `ORD-${dateStr}-${String(1000 + i).slice(1)}`,
-        restaurantId: restaurant._id,
-        branchId: branch._id,
-        terminalId: i % 2 === 0 ? t1.terminal_code : t2.terminal_code,
-        terminalName: i % 2 === 0 ? t1.name : t2.name,
-        cashierId: cashier._id,
-        cashierName: cashierDisplayName,
-        shiftId: 'SHIFT-101',
-        items: [
-          { itemId: d1.id, name: d1.name, quantity: 2, price: d1.price, subtotal: d1.price * 2 },
-          { itemId: d2.id, name: d2.name, quantity: 1, price: d2.price, subtotal: d2.price },
-        ],
-        subtotal,
-        tax,
-        discount,
-        total,
-        paymentMethod: methods[i % methods.length],
-        paymentStatus: isPending ? 'PENDING' : 'PAID',
-        orderStatus: isPending ? 'IN_PROGRESS' : 'COMPLETED',
-        createdAt: orderTime,
-        updatedAt: orderTime,
-      });
-
-      // Also create PosTransaction
-      await PosTransaction.create({
-        branch_id: branch._id,
-        terminal_id: t1._id,
-        shift_id: shift1._id,
-        transaction_number: `TXN-${dateStr}-${String(1000 + i).slice(1)}`,
-        transaction_type: 'sale',
-        status: isPending ? 'pending_payment' : 'completed',
-        subtotal,
-        discount_total: discount,
-        tax_total: tax,
-        service_charge: 0,
-        rounding_amount: 0,
-        grand_total: total,
-        items: [
-          { item_name: d1.name, quantity: 2, unit_price: d1.price, line_total: d1.price * 2, discount_amount: 0, tax_amount: 0 },
-          { item_name: d2.name, quantity: 1, unit_price: d2.price, line_total: d2.price, discount_amount: 0, tax_amount: 0 },
-        ],
-        payments: [
-          {
-            payment_method_type: methods[i % methods.length],
-            amount: total,
-            currency: 'INR',
-            status: isPending ? 'pending' : 'completed',
-            paid_at: isPending ? null : orderTime,
-          },
-        ],
-        created_by: cashier._id,
-        completed_at: isPending ? null : orderTime,
-      });
-    }
-
-    // Seed Table 15 (PosTerminalTransaction) and Table 16 (PosTransactionAdjustment)
-    const existingTerminalTxn = await PosTerminalTransaction.findOne();
-    if (!existingTerminalTxn) {
-      const orders = await PosOrder.find({ branchId: branch._id }).limit(10);
-      let sampleTxnForAdjustment: any = null;
-
-      for (let i = 0; i < orders.length; i++) {
-        const order = orders[i];
-        const isSale = i !== 3;
-        const txnType = isSale ? 'sale' : 'refund';
-        const status = order.paymentStatus === 'PAID' ? 'completed' : 'pending';
-        const txnRef = `TXN-${dateStr}-${String(2000 + i + 1).slice(1)}`;
-
-        const terminalTxn = await PosTerminalTransaction.create({
-          restaurant_id: restaurant._id,
-          branch_id: branch._id,
-          terminal_id: i % 2 === 0 ? t1._id : t2._id,
-          shift_id: shift1._id,
-          cashier_id: cashier._id,
-          order_id: order._id,
-          transaction_reference: txnRef,
-          transaction_type: txnType,
-          amount: order.total,
-          currency_code: 'INR',
-          status,
-          started_at: order.createdAt,
-          completed_at: status === 'completed' ? order.createdAt : null,
-          failure_reason: null,
-          metadata: {
-            channel: 'counter_pos',
-            paymentMethod: order.paymentMethod,
-          },
-        });
-
-        if (i === 1) {
-          sampleTxnForAdjustment = terminalTxn;
-        }
-      }
-
-      if (sampleTxnForAdjustment) {
-        await PosTransactionAdjustment.create({
-          terminal_transaction_id: sampleTxnForAdjustment._id,
-          order_id: sampleTxnForAdjustment.order_id,
-          adjustment_type: 'void',
-          reason_code: 'ITEM_ENTERED_INCORRECTLY',
-          reason: 'Incorrect item quantity entered on counter terminal',
-          amount: 250,
-          requested_by: cashier._id,
-          approved_by: null,
-          requested_at: new Date(Date.now() - 30 * 60 * 1000),
-          approved_at: null,
-          status: 'pending',
-          idempotency_key: 'IDEMP-SAMPLE-001',
-          notes: 'Customer notified cashier before final card settlement',
-        });
-      }
-    }
+    return;
   }
 
   // ==========================================
@@ -3666,6 +3423,15 @@ export class PosService {
       console.warn('Could not register terminal transaction for order:', txnErr.message);
     }
 
+    // Synchronize physical table status
+    if (data.table_number) {
+      if (data.paymentStatus === 'PAID' && data.orderStatus === 'COMPLETED') {
+        await PosService.syncTableStatus(branchId, data.table_number, 'cleaning', cashierIdObj, 'pos', `Immediate paid order #${order.orderNumber} placed. Table moved to cleaning.`);
+      } else {
+        await PosService.syncTableStatus(branchId, data.table_number, 'occupied', cashierIdObj, 'pos', `Order #${order.orderNumber} placed. Table marked occupied.`);
+      }
+    }
+
     // Append to audit ledger
     await this.logAuditEvent({
       restaurant_id: restaurantId,
@@ -3742,6 +3508,15 @@ export class PosService {
       outcome: 'success',
     });
 
+    // Synchronize physical table status
+    if (order.table_number) {
+      if (order.orderStatus === 'COMPLETED' || order.paymentStatus === 'PAID') {
+        await PosService.syncTableStatus(order.branchId, order.table_number, 'cleaning', userId, 'pos', `Order #${order.orderNumber} ${order.orderStatus}. Table transitioned to cleaning.`);
+      } else if (order.orderStatus === 'CANCELLED') {
+        await PosService.syncTableStatus(order.branchId, order.table_number, 'available', userId, 'pos', `Order #${order.orderNumber} CANCELLED. Table released to available.`);
+      }
+    }
+
     return order;
   }
 
@@ -3761,8 +3536,12 @@ export class PosService {
     }
     if (query.kitchen_status) {
       const statuses = query.kitchen_status.split(',').map((s) => s.trim().toLowerCase());
-      if (statuses.length === 1) {
-        filter.kitchen_status = statuses[0];
+      if (statuses.includes('pending')) {
+        filter.$or = [
+          { kitchen_status: { $in: statuses } },
+          { kitchen_status: { $exists: false } },
+          { kitchen_status: null },
+        ];
       } else {
         filter.kitchen_status = { $in: statuses };
       }
@@ -3873,8 +3652,10 @@ export class PosService {
     if (data.notify_waiter) {
       order.waiter_notified_at = new Date();
       order.waiter_notified_count = (order.waiter_notified_count || 0) + 1;
+      order.markModified('waiter_notified_at');
     }
 
+    order.markModified('kitchen_status');
     await order.save();
 
     await this.logAuditEvent({
@@ -3893,6 +3674,11 @@ export class PosService {
       },
       outcome: 'success',
     });
+
+    // Synchronize physical table status
+    if (order.table_number && (data.kitchen_status === 'served' || order.kitchen_status === 'served') && order.paymentStatus === 'PAID') {
+      await PosService.syncTableStatus(order.branchId, order.table_number, 'cleaning', userId, 'kitchen', `All items served and bill paid for Order #${order.orderNumber}. Table transitioned to cleaning.`);
+    }
 
     return order;
   }
@@ -4023,7 +3809,94 @@ export class PosService {
       outcome: 'success',
     });
 
+    // Synchronize physical table status: move to 'cleaning' if bill is settled
+    if (order.table_number) {
+      await PosService.syncTableStatus(
+        order.branchId,
+        order.table_number,
+        'cleaning',
+        userId,
+        'pos',
+        `Bill payment of ₹${order.total} settled via ${data.paymentMethod} for Order #${order.orderNumber}. Table automatically transitioned to cleaning.`
+      );
+    }
+
     return order;
+  }
+
+  /**
+   * Helper: synchronize physical dining table status based on active POS orders
+   */
+  static async syncTableStatus(
+    branchId: any,
+    tableNumber: string | null | undefined,
+    preferredStatusIfFree: 'cleaning' | 'available' | 'occupied' = 'cleaning',
+    userId?: any,
+    source: 'pos' | 'kitchen' | 'staff' | 'system' = 'pos',
+    reasonNotes?: string
+  ) {
+    if (!tableNumber || !branchId) return;
+
+    try {
+      const trimmedTableNumber = tableNumber.trim();
+      const table = await DiningTable.findOne({
+        branch_id: branchId,
+        table_number: { $regex: new RegExp(`^${trimmedTableNumber}$`, 'i') },
+      });
+
+      if (!table) return;
+
+      // Check for any remaining unpaid or in-progress orders for this table
+      const activeUnpaidCount = await PosOrder.countDocuments({
+        branchId: table.branch_id,
+        table_number: { $regex: new RegExp(`^${trimmedTableNumber}$`, 'i') },
+        orderStatus: { $nin: ['COMPLETED', 'CANCELLED'] },
+        paymentStatus: 'PENDING',
+      });
+
+      if (activeUnpaidCount > 0) {
+        if (table.current_status !== 'occupied') {
+          const prev = table.current_status;
+          table.current_status = 'occupied';
+          await table.save();
+
+          await DiningTableStatusHistory.create({
+            dining_table_id: table._id,
+            restaurant_id: table.restaurant_id,
+            branch_id: table.branch_id,
+            previous_status: prev,
+            new_status: 'occupied',
+            source,
+            notes: reasonNotes || `Active orders running on table ${tableNumber}. Table marked occupied.`,
+            changed_by: userId && mongoose.isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : null,
+          });
+        }
+      } else {
+        // No active unpaid orders remain!
+        if (table.current_status === 'occupied') {
+          const prev = table.current_status;
+          table.current_status = preferredStatusIfFree;
+          await table.save();
+
+          await DiningTableStatusHistory.create({
+            dining_table_id: table._id,
+            restaurant_id: table.restaurant_id,
+            branch_id: table.branch_id,
+            previous_status: prev,
+            new_status: preferredStatusIfFree,
+            source,
+            notes:
+              reasonNotes ||
+              (preferredStatusIfFree === 'cleaning'
+                ? `All orders completed / bill payment settled for table ${tableNumber}. Table transitioned to cleaning.`
+                : `Table ${tableNumber} released. Transitioned to available.`),
+            changed_by: userId && mongoose.isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : null,
+          });
+        }
+      }
+    } catch (err: any) {
+      console.warn(`[PosService.syncTableStatus] Failed to sync table ${tableNumber}:`, err.message);
+    }
   }
 }
 

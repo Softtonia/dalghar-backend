@@ -59,9 +59,24 @@ export class RoleController {
     }
   }
 
+  static async updatePermissions(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = String(req.params.id);
+      const permissions = Array.isArray(req.body.permissions)
+        ? req.body.permissions
+        : Array.isArray(req.body)
+        ? req.body
+        : [];
+      const role = await RoleService.updateRolePermissions(id, permissions);
+      res.status(200).json({ success: true, data: role, message: 'Role permissions updated successfully' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async getPermissions(_req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const permissions = RoleService.getAvailablePermissions();
+      const permissions = await RoleService.getAvailablePermissions();
       res.status(200).json({ success: true, data: permissions });
     } catch (error) {
       next(error);

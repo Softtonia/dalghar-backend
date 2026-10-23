@@ -1,15 +1,15 @@
 import { Router } from 'express';
-import { authenticate, requirePermission } from '../../middleware/auth.middleware.js';
+import { authenticate, requirePermission, requireAnyPermission } from '../../middleware/auth.middleware.js';
 import { PERMISSIONS } from '../../config/permissions.js';
 import { BranchController } from './branch.controller.js';
 
 const router = Router();
 
-// List branches (Enforces branch.view permission)
-router.get('/', authenticate, requirePermission(PERMISSIONS.BRANCH_VIEW), BranchController.list);
+// List branches (Enforces branch.view or branch.create permission so creators can view the dashboard)
+router.get('/', authenticate, requireAnyPermission(PERMISSIONS.BRANCH_VIEW, PERMISSIONS.BRANCH_CREATE), BranchController.list);
 
-// Get single branch details by ID (Enforces branch.view permission)
-router.get('/:id', authenticate, requirePermission(PERMISSIONS.BRANCH_VIEW), BranchController.getById);
+// Get single branch details by ID (Enforces branch.view or branch.create permission)
+router.get('/:id', authenticate, requireAnyPermission(PERMISSIONS.BRANCH_VIEW, PERMISSIONS.BRANCH_CREATE), BranchController.getById);
 
 // Create branch (Enforces branch.create permission)
 router.post('/', authenticate, requirePermission(PERMISSIONS.BRANCH_CREATE), BranchController.create);

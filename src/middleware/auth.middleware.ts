@@ -57,6 +57,11 @@ export const authenticate = (
   }
 };
 
+export interface AuthenticatedRequest extends Request {
+  user?: AuthJwtPayload;
+  effectivePermissions?: string[];
+}
+
 export const requireRole = (...roles: UserRole[]) => {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
     if (!req.user) {
@@ -76,7 +81,7 @@ export const requireRole = (...roles: UserRole[]) => {
 /**
  * Fine-grained RBAC permission checking middleware.
  * Super Admin bypasses checks.
- * Dynamically queries current permissions from User, assigned Role(s), and ROLE_PERMISSIONS
+ * Dynamically queries current permissions from User, assigned Role(s), and direct allows/denials
  * so that any permission updates made by the admin take effect immediately without requiring re-login.
  */
 export const requirePermission = (...requiredPermissions: string[]) => {
@@ -87,15 +92,10 @@ export const requirePermission = (...requiredPermissions: string[]) => {
         return;
       }
 
-      // Super Admin bypasses individual permission checks
-      if (req.user.role === 'SUPER_ADMIN') {
-        return next();
-      }
-
-      // Dynamically fetch latest user from database
       const { User } = await import('../models/User.js');
-      const { UserHasRole } = await import('../models/UserHasRole.js');
-      const { Role } = await import('../models/Role.js');
+      const { calculateUserEffectivePermissions, checkPermissionSatisfied } = await import(
+        '../utils/permissionUtils.js'
+      );
 
       const dbUser = await User.findById(req.user.userId);
       if (!dbUser || !dbUser.isActive) {
@@ -103,25 +103,21 @@ export const requirePermission = (...requiredPermissions: string[]) => {
         return;
       }
 
-      // Collect base permissions from static role definition
-      const baseRolePermissions = ROLE_PERMISSIONS[dbUser.role] || [];
-      const customPermissions = dbUser.permissions || [];
+      // Calculate authoritative live effective permissions
+      const permResult = await calculateUserEffectivePermissions(dbUser);
+      req.effectivePermissions = permResult.effectivePermissions;
 
-      // Collect permissions from all assigned dynamic roles (via UserHasRole)
-      const userRoles = await UserHasRole.find({ userId: dbUser._id });
-      const roleIds = userRoles.map((ur) => ur.roleId);
-      const dynamicRoles = await Role.find({ _id: { $in: roleIds }, isActive: true });
-      const dynamicPermissions = dynamicRoles.flatMap((r) => r.permissions || []);
+      // Super Admin bypass
+      if (
+        req.user.role === 'SUPER_ADMIN' ||
+        permResult.effectivePermissions.includes('*')
+      ) {
+        return next();
+      }
 
-      const userPermissions = Array.from(
-        new Set([...baseRolePermissions, ...customPermissions, ...dynamicPermissions])
-      );
-
-      const hasPermission = requiredPermissions.every(
-        (perm) =>
-          userPermissions.includes(perm) ||
-          userPermissions.includes('*') ||
-          userPermissions.includes('restaurant.*')
+      // Check all required permissions
+      const hasPermission = requiredPermissions.every((perm) =>
+        checkPermissionSatisfied(permResult.effectivePermissions, perm)
       );
 
       if (!hasPermission) {
@@ -138,3 +134,59 @@ export const requirePermission = (...requiredPermissions: string[]) => {
     }
   };
 };
+
+/**
+ * Check if user has ANY of the specified permissions.
+ * Super Admin bypasses checks.
+ */
+export const requireAnyPermission = (...allowedPermissions: string[]) => {
+  return async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, message: 'Unauthorized. Authentication required.' });
+        return;
+      }
+
+      const { User } = await import('../models/User.js');
+      const { calculateUserEffectivePermissions, checkPermissionSatisfied } = await import(
+        '../utils/permissionUtils.js'
+      );
+
+      const dbUser = await User.findById(req.user.userId);
+      if (!dbUser || !dbUser.isActive) {
+        res.status(401).json({ success: false, message: 'Account not found or has been disabled.' });
+        return;
+      }
+
+      // Calculate authoritative live effective permissions
+      const permResult = await calculateUserEffectivePermissions(dbUser);
+      req.effectivePermissions = permResult.effectivePermissions;
+
+      // Super Admin bypass
+      if (
+        req.user.role === 'SUPER_ADMIN' ||
+        permResult.effectivePermissions.includes('*')
+      ) {
+        return next();
+      }
+
+      // Check if user has ANY of the specified permissions
+      const hasPermission = allowedPermissions.some((perm) =>
+        checkPermissionSatisfied(permResult.effectivePermissions, perm)
+      );
+
+      if (!hasPermission) {
+        res.status(403).json({
+          success: false,
+          message: `Forbidden: Missing required permission (requires one of: [${allowedPermissions.join(', ')}])`,
+        });
+        return;
+      }
+
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+};
+

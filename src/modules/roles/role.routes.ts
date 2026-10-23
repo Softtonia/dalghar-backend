@@ -51,6 +51,14 @@ router.put(
   RoleController.update
 );
 
+// Update role permissions specifically
+router.put(
+  '/:id/permissions',
+  authenticate,
+  requirePermission(PERMISSIONS.ROLES_ASSIGN_PERMISSIONS),
+  RoleController.updatePermissions
+);
+
 // Delete role
 router.delete(
   '/:id',

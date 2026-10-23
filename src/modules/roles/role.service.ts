@@ -173,8 +173,55 @@ export class RoleService {
   /**
    * Get list of all system permissions available for selection
    */
-  static getAvailablePermissions() {
-    return ALL_PERMISSIONS;
+  static async getAvailablePermissions() {
+    const { Permission } = await import('../../models/Permission.js');
+    const { PERMISSION_CATALOG } = await import('../../config/permissions.js');
+    const dbPermissions = await Permission.find().sort({ module: 1, key: 1 });
+    if (dbPermissions && dbPermissions.length > 0) {
+      return dbPermissions.map((p) => ({
+        id: String(p._id),
+        name: p.name,
+        key: p.key,
+        module: p.module,
+        description: p.description,
+      }));
+    }
+    return PERMISSION_CATALOG;
+  }
+
+  /**
+   * Update role permissions directly
+   */
+  static async updateRolePermissions(id: string, permissions: string[]) {
+    const role = await Role.findById(id);
+    if (!role) {
+      throw ApiError.notFound('Role not found');
+    }
+
+    role.permissions = Array.from(new Set(permissions));
+    await role.save();
+
+    // Synchronize user.permissions in MongoDB for all users assigned to this role
+    try {
+      const userRoleLinks = await UserHasRole.find({ roleId: role._id });
+      const userIds = userRoleLinks.map((ur) => ur.userId);
+      const roleSlugUpper = role.slug.toUpperCase().replace(/-/g, '_');
+      await User.updateMany(
+        {
+          $or: [
+            { _id: { $in: userIds } },
+            { roles: String(role._id) },
+            { role: roleSlugUpper },
+            { role: role.slug.toLowerCase() },
+          ],
+        },
+        { $set: { permissions: role.permissions } }
+      );
+    } catch (err) {
+      console.error('Failed to sync user permissions on role update:', err);
+    }
+
+    return role;
   }
 
   /**

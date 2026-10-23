@@ -395,6 +395,14 @@ export const createPosOrderSchema = z.object({
         subtotal: z.number().min(0, 'Subtotal must be non-negative'),
         notes: z.string().optional().nullable(),
         kitchenStatus: z.enum(['pending', 'preparing', 'ready']).optional().default('pending'),
+        addons: z
+          .array(
+            z.object({
+              name: z.string(),
+              price: z.number().min(0).default(0),
+            })
+          )
+          .optional(),
       })
     )
     .min(1, 'Order must contain at least one item'),

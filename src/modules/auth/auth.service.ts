@@ -9,34 +9,20 @@ import { config } from '../../config/env.js';
 
 export class AuthService {
   private static async formatUserDto(user: IUser): Promise<UserAuthDto> {
-    const rolePermissions = ROLE_PERMISSIONS[user.role] || [];
-    const customPermissions = user.permissions || [];
-
-    // Query dynamic permissions from roles assigned via UserHasRole
-    let dynamicPermissions: string[] = [];
-    try {
-      const { UserHasRole } = await import('../../models/UserHasRole.js');
-      const { Role } = await import('../../models/Role.js');
-      const userRoles = await UserHasRole.find({ userId: user._id });
-      const roleIds = userRoles.map((ur) => ur.roleId);
-      const roles = await Role.find({ _id: { $in: roleIds }, isActive: true });
-      dynamicPermissions = roles.flatMap((r) => r.permissions || []);
-    } catch {
-      // Fallback to static permissions if lookup fails
-    }
-
-    const combinedPermissions = Array.from(
-      new Set([...rolePermissions, ...customPermissions, ...dynamicPermissions])
-    );
+    const { calculateUserEffectivePermissions } = await import('../../utils/permissionUtils.js');
+    const permResult = await calculateUserEffectivePermissions(user);
 
     return {
       id: user._id.toString(),
       name: user.name,
       email: user.email,
       role: user.role,
+      roles: permResult.roles.map((r) => ({ id: r.id, name: r.name, slug: r.slug })),
       restaurantId: user.restaurantId || null,
       branchId: user.branchId || null,
-      permissions: combinedPermissions,
+      terminalId: user.terminalId || null,
+      permissions: permResult.effectivePermissions,
+      directPermissions: [],
     };
   }
 
@@ -55,6 +41,63 @@ export class AuthService {
 
     if (!user.isActive) {
       throw new ApiError(403, 'Account is inactive or suspended');
+    }
+
+    // Workspace-specific validation when logging in from a dedicated workspace terminal
+    if (input.workspace) {
+      const { calculateUserEffectivePermissions } = await import('../../utils/permissionUtils.js');
+      const permResult = await calculateUserEffectivePermissions(user);
+      const perms = permResult.effectivePermissions;
+      const roleSlugs = permResult.roles.map((r) => r.slug);
+
+      if (input.workspace === 'kitchen') {
+        const isKitchen =
+          user.role === 'SUPER_ADMIN' ||
+          user.role === 'KITCHEN_STAFF' ||
+          roleSlugs.includes('kitchen-staff') ||
+          roleSlugs.includes('kitchen_staff') ||
+          perms.includes('kitchen.orders.view');
+
+        if (!isKitchen) {
+          throw new ApiError(403, 'Access Denied: Your account role is not authorized for the Kitchen Display workspace.');
+        }
+      } else if (input.workspace === 'waiter') {
+        const isWaiter =
+          user.role === 'SUPER_ADMIN' ||
+          user.role === 'WAITER' ||
+          roleSlugs.includes('waiter') ||
+          perms.includes('waiter.orders.view');
+
+        if (!isWaiter) {
+          throw new ApiError(403, 'Access Denied: Your account role is not authorized for the Waiter Service workspace.');
+        }
+      } else if (input.workspace === 'pos') {
+        const isPos =
+          user.role === 'SUPER_ADMIN' ||
+          user.role === 'RESTAURANT_ADMIN' ||
+          user.role === 'BRANCH_MANAGER' ||
+          user.role === 'CASHIER' ||
+          roleSlugs.includes('cashier') ||
+          roleSlugs.includes('billing') ||
+          perms.includes('pos.view');
+
+        if (!isPos) {
+          throw new ApiError(403, 'Access Denied: Your account role is not authorized for the Cashier POS Terminal.');
+        }
+      } else if (input.workspace === 'admin') {
+        const isAdmin =
+          user.role === 'SUPER_ADMIN' ||
+          user.role === 'RESTAURANT_ADMIN' ||
+          user.role === 'BRANCH_MANAGER' ||
+          roleSlugs.includes('super-admin') ||
+          roleSlugs.includes('administrator') ||
+          roleSlugs.includes('branch-manager') ||
+          perms.includes('dashboard.view');
+
+        if (!isAdmin) {
+          throw new ApiError(403, 'Access Denied: Your account role does not have authorization for the Administration Portal.');
+        }
+      }
     }
 
     const tokens = TokenService.generateTokens({

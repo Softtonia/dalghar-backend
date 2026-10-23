@@ -143,12 +143,5 @@ export const seedPeripherals = async (): Promise<void> => {
     console.log('✅ Successfully seeded POS peripheral hardware devices!');
   } catch (error) {
     console.error('❌ Failed to seed peripherals:', error);
-  } finally {
-    if (mongoose.connection.readyState !== 0) {
-      await mongoose.disconnect();
-      console.log('Disconnected from database.');
-    }
   }
 };
-
-seedPeripherals();

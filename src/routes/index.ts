@@ -10,6 +10,12 @@ import { campaignRoutes } from '../modules/campaigns/campaign.routes.js';
 import { menuRoutes } from '../modules/menu/index.js';
 import { uploadRoutes } from '../modules/upload/upload.routes.js';
 import { posRoutes } from '../modules/pos/pos.routes.js';
+import { diningAreaRoutes, diningTableRoutes } from '../modules/dining/index.js';
+import { reservationRoutes, waitingListRoutes } from '../modules/reservations/index.js';
+
+import { RoleController } from '../modules/roles/role.controller.js';
+import { authenticate, requirePermission } from '../middleware/auth.middleware.js';
+import { PERMISSIONS } from '../config/permissions.js';
 
 const router = Router();
 
@@ -23,10 +29,14 @@ router.get('/health', (_req, res) => {
 
 router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
+router.use('/admin/users', userRoutes);
 router.use('/restaurants', restaurantRoutes);
 router.use('/branches', branchRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/roles', roleRoutes);
+router.use('/admin/roles', roleRoutes);
+router.get('/permissions', authenticate, requirePermission(PERMISSIONS.ROLE_VIEW), RoleController.getPermissions);
+router.get('/admin/permissions', authenticate, requirePermission(PERMISSIONS.ROLE_VIEW), RoleController.getPermissions);
 router.use('/email-templates', emailTemplateRoutes);
 router.use('/campaigns', campaignRoutes);
 router.use('/menu', menuRoutes);
@@ -35,6 +45,15 @@ router.use('/upload', uploadRoutes);
 router.use('/admin/upload', uploadRoutes);
 router.use('/pos', posRoutes);
 router.use('/admin/pos', posRoutes);
+router.use('/dining-areas', diningAreaRoutes);
+router.use('/admin/dining-areas', diningAreaRoutes);
+router.use('/dining-tables', diningTableRoutes);
+router.use('/admin/dining-tables', diningTableRoutes);
+router.use('/table-reservations', reservationRoutes);
+router.use('/admin/table-reservations', reservationRoutes);
+router.use('/waiting-list', waitingListRoutes);
+router.use('/admin/waiting-list', waitingListRoutes);
 
 export const apiRouter = router;
+
 

@@ -14,6 +14,7 @@ export interface IPosOrderItem {
   subtotal: number;
   notes?: string | null;
   kitchenStatus?: 'pending' | 'preparing' | 'ready';
+  addons?: Array<{ name: string; price: number }>;
 }
 
 export interface IPosOrder extends Document {
@@ -64,6 +65,12 @@ const posOrderItemSchema = new Schema<IPosOrderItem>(
       enum: ['pending', 'preparing', 'ready'],
       default: 'pending',
     },
+    addons: [
+      {
+        name: { type: String, required: true },
+        price: { type: Number, required: true, default: 0 },
+      },
+    ],
   },
   { _id: false }
 );

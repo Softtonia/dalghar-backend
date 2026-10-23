@@ -51,4 +51,34 @@ router.delete(
   UserController.delete
 );
 
+// User Roles Management
+router.get(
+  '/:id/roles',
+  authenticate,
+  requirePermission(PERMISSIONS.ROLE_VIEW),
+  UserController.getUserRoles
+);
+
+router.put(
+  '/:id/roles',
+  authenticate,
+  requirePermission(PERMISSIONS.USERS_ASSIGN_ROLES),
+  UserController.updateUserRoles
+);
+
+// User Permissions Overrides Management
+router.get(
+  '/:id/permissions',
+  authenticate,
+  requirePermission(PERMISSIONS.ROLE_VIEW),
+  UserController.getUserPermissions
+);
+
+router.put(
+  '/:id/permissions',
+  authenticate,
+  requirePermission(PERMISSIONS.ROLES_ASSIGN_PERMISSIONS),
+  UserController.updateUserPermissions
+);
+
 export const userRoutes = router;
