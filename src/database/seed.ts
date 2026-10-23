@@ -20,6 +20,7 @@ const runSeed = async (): Promise<void> => {
     await seedDiningAreasAndTables();
     await seedReservationsAndWaitingList();
     await EmailTemplateService.seedDefaultTemplates();
+    await (await import('./seeders/staff_terminals.seeder.js')).seedMultiRoleStaffAndTerminals();
 
     console.log('Database seeding completed.');
   } catch (error) {

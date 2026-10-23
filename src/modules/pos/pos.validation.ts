@@ -32,6 +32,7 @@ export const createPosTerminalSchema = z.object({
     .min(1, 'Terminal code is required')
     .max(50, 'Terminal code cannot exceed 50 characters')
     .transform((val) => val.toUpperCase()),
+  terminal_type: z.enum(['WAITER', 'CASHIER', 'KITCHEN', 'MANAGER']).optional().default('CASHIER'),
   name: z.string().trim().min(1, 'Terminal name is required').max(150, 'Name cannot exceed 150 characters'),
   terminal_name: z.string().trim().max(150).optional(),
   device_identifier: z.string().trim().max(255).optional().nullable(),
@@ -50,6 +51,7 @@ export const createPosTerminalSchema = z.object({
 });
 
 export const updatePosTerminalSchema = z.object({
+  terminal_type: z.enum(['WAITER', 'CASHIER', 'KITCHEN', 'MANAGER']).optional(),
   name: z.string().trim().min(1).max(150).optional(),
   terminal_name: z.string().trim().max(150).optional(),
   device_identifier: z.string().trim().max(255).optional().nullable(),
@@ -468,6 +470,43 @@ export const listPosOrdersQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional().default(30),
 });
 
+export const appendOrderItemsSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        itemId: z.string().min(1, 'Item ID is required'),
+        name: z.string().min(1, 'Item name is required'),
+        quantity: z.number().int().min(1, 'Quantity must be at least 1'),
+        price: z.number().min(0, 'Price must be non-negative'),
+        subtotal: z.number().min(0, 'Subtotal must be non-negative'),
+        notes: z.string().optional().nullable(),
+        kitchenStatus: z.enum(['pending', 'preparing', 'ready']).optional().default('pending'),
+        addons: z
+          .array(
+            z.object({
+              name: z.string(),
+              price: z.number().min(0).default(0),
+            })
+          )
+          .optional(),
+      })
+    )
+    .min(1, 'Must include at least one item to append'),
+  subtotal: z.number().min(0),
+  tax: z.number().min(0).default(0),
+  discount: z.number().min(0).default(0),
+  total: z.number().min(0),
+  notes: z.string().optional().nullable(),
+});
+
+export const approveOrderSchema = z.object({
+  notes: z.string().trim().optional().nullable(),
+});
+
+export const rejectOrderSchema = z.object({
+  reason: z.string().trim().min(1, 'Rejection reason is required'),
+});
+
 export type CreatePosOrderInput = z.infer<typeof createPosOrderSchema>;
 export type UpdateOrderStatusInput = z.infer<typeof updateOrderStatusSchema>;
 export type UpdateKitchenStatusInput = z.infer<typeof updateKitchenStatusSchema>;
@@ -475,6 +514,9 @@ export type AssignWaiterInput = z.infer<typeof assignWaiterSchema>;
 export type UpdateOrderItemStatusInput = z.infer<typeof updateOrderItemStatusSchema>;
 export type CollectOrderPaymentInput = z.infer<typeof collectOrderPaymentSchema>;
 export type ListPosOrdersQueryInput = z.infer<typeof listPosOrdersQuerySchema>;
+export type AppendOrderItemsInput = z.infer<typeof appendOrderItemsSchema>;
+export type ApproveOrderInput = z.infer<typeof approveOrderSchema>;
+export type RejectOrderInput = z.infer<typeof rejectOrderSchema>;
 
 
 

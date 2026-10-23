@@ -12,6 +12,7 @@ import { uploadRoutes } from '../modules/upload/upload.routes.js';
 import { posRoutes } from '../modules/pos/pos.routes.js';
 import { diningAreaRoutes, diningTableRoutes } from '../modules/dining/index.js';
 import { reservationRoutes, waitingListRoutes } from '../modules/reservations/index.js';
+import { QrMenuController } from '../modules/dining/qrMenu.controller.js';
 
 import { RoleController } from '../modules/roles/role.controller.js';
 import { authenticate, requirePermission } from '../middleware/auth.middleware.js';
@@ -53,6 +54,17 @@ router.use('/table-reservations', reservationRoutes);
 router.use('/admin/table-reservations', reservationRoutes);
 router.use('/waiting-list', waitingListRoutes);
 router.use('/admin/waiting-list', waitingListRoutes);
+
+// Public Digital QR Menu routes
+router.get('/public/qr-menu/:token', QrMenuController.getPublicTableDetails);
+router.get('/public/qr-menu/:token/menu', QrMenuController.getPublicDigitalMenu);
+router.post('/public/qr-menu/:token/orders', QrMenuController.submitPublicOrder);
+router.get('/public/qr-orders/:orderId/status', QrMenuController.getPublicOrderStatus);
+
+// Admin table QR alias routes matching Phase 7 specs
+router.get('/admin/tables/:tableId/qr-code', authenticate, requirePermission(PERMISSIONS.TABLE_VIEW), QrMenuController.getTableQr);
+router.post('/admin/tables/:tableId/qr-code', authenticate, requirePermission(PERMISSIONS.TABLE_MANAGE), QrMenuController.getTableQr);
+router.post('/admin/tables/:tableId/qr-code/regenerate', authenticate, requirePermission(PERMISSIONS.TABLE_MANAGE), QrMenuController.regenerateTableQr);
 
 export const apiRouter = router;
 

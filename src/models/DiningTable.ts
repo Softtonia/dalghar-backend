@@ -23,6 +23,12 @@ export interface IDiningTable extends Document {
   is_combinable: boolean;
   is_active: boolean;
   notes?: string | null;
+  qr_code?: {
+    token: string;
+    token_hash: string;
+    generated_at: Date;
+    is_active: boolean;
+  } | null;
   created_by?: Types.ObjectId | string | null;
   updated_by?: Types.ObjectId | string | null;
   createdAt: Date;
@@ -126,6 +132,12 @@ const diningTableSchema = new Schema<IDiningTable>(
       type: String,
       trim: true,
       default: null,
+    },
+    qr_code: {
+      token: { type: String, default: null },
+      token_hash: { type: String, default: null, index: true },
+      generated_at: { type: Date, default: null },
+      is_active: { type: Boolean, default: true },
     },
     created_by: {
       type: Schema.Types.Mixed,

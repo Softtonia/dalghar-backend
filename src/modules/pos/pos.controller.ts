@@ -26,6 +26,9 @@ import {
   updateOrderItemStatusSchema,
   collectOrderPaymentSchema,
   listPosOrdersQuerySchema,
+  appendOrderItemsSchema,
+  approveOrderSchema,
+  rejectOrderSchema,
 } from './pos.validation.js';
 
 export class PosController {
@@ -2046,6 +2049,75 @@ export class PosController {
       res.status(200).json({
         success: true,
         message: 'Payment collected successfully',
+        data: updated,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  /**
+   * POST /pos/orders/:orderId/items
+   * Append items to active order (Incremental KOT)
+   */
+  static appendOrderItems = async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
+      const data = appendOrderItemsSchema.parse(req.body);
+      const updated = await PosService.appendOrderItems(orderId, data, req.user?.userId);
+      res.status(200).json({
+        success: true,
+        message: 'Incremental items appended and KOT dispatched successfully',
+        data: updated,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  /**
+   * POST /pos/orders/:orderId/approve
+   * Manager approves order / KOT dispatch
+   */
+  static approveOrder = async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
+      const data = approveOrderSchema.parse(req.body);
+      const updated = await PosService.approveOrder(orderId, data, req.user?.userId);
+      res.status(200).json({
+        success: true,
+        message: 'Order approved and dispatched to kitchen',
+        data: updated,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  /**
+   * POST /pos/orders/:orderId/reject
+   * Manager rejects order
+   */
+  static rejectOrder = async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
+      const data = rejectOrderSchema.parse(req.body);
+      const updated = await PosService.rejectOrder(orderId, data, req.user?.userId);
+      res.status(200).json({
+        success: true,
+        message: 'Order rejected and cancelled',
         data: updated,
       });
     } catch (err) {

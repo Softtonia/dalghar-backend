@@ -623,6 +623,27 @@ router.post(
   PosController.collectOrderPayment
 );
 
+// Append items to active order (Incremental KOT)
+router.post(
+  '/orders/:orderId/items',
+  requirePermission(PERMISSIONS.ORDER_CREATE),
+  PosController.appendOrderItems
+);
+
+// Manager approve order / KOT
+router.post(
+  '/orders/:orderId/approve',
+  requirePermission(PERMISSIONS.POS_APPROVE_ORDER),
+  PosController.approveOrder
+);
+
+// Manager reject order
+router.post(
+  '/orders/:orderId/reject',
+  requirePermission(PERMISSIONS.POS_APPROVE_ORDER),
+  PosController.rejectOrder
+);
+
 export const posRoutes = router;
 
 

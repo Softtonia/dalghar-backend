@@ -49,6 +49,9 @@ import type {
   UpdateOrderItemStatusInput,
   CollectOrderPaymentInput,
   ListPosOrdersQueryInput,
+  AppendOrderItemsInput,
+  ApproveOrderInput,
+  RejectOrderInput,
 } from './pos.validation.js';
 import mongoose from 'mongoose';
 
@@ -477,9 +480,20 @@ export class PosService {
     await this.seedDemoDataIfEmpty();
     const filter: any = {};
     if (query.branch_id && mongoose.isValidObjectId(query.branch_id)) filter.branch_id = query.branch_id;
-    if (query.terminal_id && mongoose.isValidObjectId(query.terminal_id)) filter.terminal_id = query.terminal_id;
     if (query.cashier_id && mongoose.isValidObjectId(query.cashier_id)) filter.cashier_id = query.cashier_id;
     if (query.status) filter.status = query.status;
+
+    if (query.terminal_id) {
+      if (mongoose.isValidObjectId(query.terminal_id)) {
+        filter.terminal_id = query.terminal_id;
+      } else {
+        // Find terminal by code first
+        const term = await PosTerminal.findOne({ terminal_code: query.terminal_id, deleted_at: null }).select('_id');
+        if (term) {
+          filter.terminal_id = term._id;
+        }
+      }
+    }
 
     const page = query.page || 1;
     const limit = query.limit || 20;
@@ -3304,6 +3318,45 @@ export class PosService {
     const terminal = await PosTerminal.findOne({ _id: data.terminal_id, deleted_at: null });
     if (!terminal) throw new ApiError(404, 'POS Terminal not found');
 
+    // Terminal Authorization Check
+    if (userId && mongoose.isValidObjectId(userId)) {
+      const userDoc = await User.findById(userId);
+      const userRole = (userDoc?.role || '').toUpperCase();
+      const isElevated =
+        userRole === 'SUPER_ADMIN' ||
+        userRole === 'RESTAURANT_ADMIN' ||
+        userRole === 'BRANCH_MANAGER';
+
+      // Waiters can submit dine-in orders / KOTs from any active terminal in their branch
+      const isWaiter = userRole === 'WAITER';
+
+      if (!isElevated && !isWaiter) {
+        // Verify assignment if not elevated or waiter
+        const assignment = await PosTerminalAssignment.findOne({
+          terminal_id: terminal._id,
+          user_id: new mongoose.Types.ObjectId(userId),
+          is_active: true,
+          unassigned_at: null,
+        });
+
+        const totalAssignmentsForTerminal = await PosTerminalAssignment.countDocuments({
+          terminal_id: terminal._id,
+          is_active: true,
+          unassigned_at: null,
+        });
+
+        // If the terminal has explicit active user assignments and this non-waiter user isn't assigned:
+        if (totalAssignmentsForTerminal > 0 && !assignment) {
+          // If terminal is not locked to specific users or user belongs to the same branch, allow or auto-assign
+          const userBranchId = userDoc?.branchId?.toString();
+          const terminalBranchId = terminal.branch_id?.toString();
+          if (userBranchId && terminalBranchId && userBranchId !== terminalBranchId) {
+            throw new ApiError(403, `User is not assigned or authorized to operate terminal ${terminal.terminal_code || terminal.name}`);
+          }
+        }
+      }
+    }
+
     let branchId = (data.branch_id && mongoose.isValidObjectId(data.branch_id))
       ? new mongoose.Types.ObjectId(data.branch_id)
       : terminal.branch_id;
@@ -3344,27 +3397,43 @@ export class PosService {
       }
     }
 
-    // Resolve cashier
+    // Resolve cashier and role
     let cashierName = 'Cashier';
     let cashierIdObj: any = null;
+    let userRole = '';
     if (userId && mongoose.isValidObjectId(userId)) {
       cashierIdObj = new mongoose.Types.ObjectId(userId);
       const user = await User.findById(userId);
       if (user) {
         cashierName = user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email;
+        userRole = user.role || '';
       }
     } else {
       const defaultUser = await User.findOne();
       if (defaultUser) {
         cashierIdObj = defaultUser._id;
         cashierName = defaultUser.name || defaultUser.email;
+        userRole = defaultUser.role || '';
       }
     }
+
+    // Check manager approval requirement:
+    // If explicitly configured, or terminal is a WAITER terminal, or current operator is a WAITER
+    const isWaiter = userRole.toUpperCase() === 'WAITER' || terminal.terminal_type === 'WAITER';
+    const requiresApproval = Boolean(terminal.settings?.require_manager_approval) || isWaiter;
+    const initialApprovalStatus = requiresApproval ? 'PENDING_APPROVAL' : 'NONE';
+    const initialKitchenStatus = requiresApproval ? 'pending' : (data.kitchen_status || 'pending');
 
     // Generate unique order number
     const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, '');
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const orderNumber = `ORD-${dateStr}-${randomSuffix}`;
+
+    const itemsWithRound = (data.items || []).map((itm: any) => ({
+      ...itm,
+      kot_round: itm.kot_round || 1,
+      kitchenStatus: requiresApproval ? 'pending' : (itm.kitchenStatus || 'pending'),
+    }));
 
     // Create order document
     const order: any = await PosOrder.create({
@@ -3381,10 +3450,13 @@ export class PosService {
       customer_phone: data.customer_phone || null,
       customerId: data.customerId && mongoose.isValidObjectId(data.customerId) ? new mongoose.Types.ObjectId(data.customerId) : null,
       order_type: data.order_type || 'dine_in',
-      kitchen_status: data.kitchen_status || 'pending',
-      waiter_id: data.waiter_id && mongoose.isValidObjectId(data.waiter_id) ? new mongoose.Types.ObjectId(data.waiter_id) : null,
-      waiter_name: data.waiter_name || null,
-      items: data.items,
+      kitchen_status: initialKitchenStatus,
+      approval_status: initialApprovalStatus,
+      approval_reason: requiresApproval ? 'Waiter Order - Awaiting Manager Review' : null,
+      current_kot_round: 1,
+      waiter_id: data.waiter_id && mongoose.isValidObjectId(data.waiter_id) ? new mongoose.Types.ObjectId(data.waiter_id) : (isWaiter ? cashierIdObj : null),
+      waiter_name: data.waiter_name || (terminal.terminal_type === 'WAITER' ? cashierName : null),
+      items: itemsWithRound,
       subtotal: data.subtotal,
       tax: data.tax,
       discount: data.discount,
@@ -3535,7 +3607,7 @@ export class PosService {
       filter.terminalId = query.terminal_id;
     }
     if (query.kitchen_status) {
-      const statuses = query.kitchen_status.split(',').map((s) => s.trim().toLowerCase());
+      const statuses = query.kitchen_status.split(',').map((s: string) => s.trim().toLowerCase());
       if (statuses.includes('pending')) {
         filter.$or = [
           { kitchen_status: { $in: statuses } },
@@ -3897,6 +3969,162 @@ export class PosService {
     } catch (err: any) {
       console.warn(`[PosService.syncTableStatus] Failed to sync table ${tableNumber}:`, err.message);
     }
+  }
+
+  /**
+   * Append items to an existing order as a new round / incremental KOT
+   */
+  static async appendOrderItems(orderId: string, data: AppendOrderItemsInput, userId?: string) {
+    let order: any = null;
+    if (mongoose.isValidObjectId(orderId)) {
+      order = await PosOrder.findById(orderId);
+    }
+    if (!order) {
+      order = await PosOrder.findOne({ orderNumber: orderId });
+    }
+    if (!order) throw new ApiError(404, 'POS Order not found');
+
+    if (order.orderStatus === 'COMPLETED' || order.orderStatus === 'CANCELLED') {
+      throw new ApiError(400, `Cannot add items to a ${order.orderStatus} order`);
+    }
+
+    const nextRound = (order.current_kot_round || 1) + 1;
+    order.current_kot_round = nextRound;
+
+    // Check user and terminal setting for manager approval
+    let requiresApproval = false;
+    if (userId && mongoose.isValidObjectId(userId)) {
+      const u = await User.findById(userId).select('role').lean();
+      if (u?.role && u.role.toUpperCase() === 'WAITER') {
+        requiresApproval = true;
+      }
+    }
+    if (!requiresApproval && order.terminalId) {
+      const term = await PosTerminal.findOne({
+        $or: [{ terminal_code: order.terminalId }, { _id: mongoose.isValidObjectId(order.terminalId) ? order.terminalId : null }],
+        deleted_at: null,
+      });
+      if (term?.settings?.require_manager_approval || term?.terminal_type === 'WAITER') {
+        requiresApproval = true;
+      }
+    }
+
+    const newItemsWithRound = data.items.map((itm: any) => ({
+      ...itm,
+      kot_round: nextRound,
+      kitchenStatus: 'pending',
+    }));
+
+    order.items.push(...(newItemsWithRound as any));
+    order.subtotal = Number(order.subtotal || 0) + Number(data.subtotal || 0);
+    order.tax = Number(order.tax || 0) + Number(data.tax || 0);
+    order.discount = Number(order.discount || 0) + Number(data.discount || 0);
+    order.total = Number(order.total || 0) + Number(data.total || 0);
+
+    if (requiresApproval) {
+      order.approval_status = 'PENDING_APPROVAL';
+      order.approval_reason = `Incremental KOT (Round #${nextRound}) Awaiting Manager Review`;
+    } else {
+      order.kitchen_status = 'pending';
+    }
+
+    if (data.notes) {
+      order.notes = order.notes ? `${order.notes} | ${data.notes}` : data.notes;
+    }
+
+    await order.save();
+
+    await this.logAuditEvent({
+      restaurant_id: order.restaurantId,
+      branch_id: order.branchId,
+      user_id: userId,
+      action: 'ORDER_ITEMS_APPENDED',
+      entity_type: 'pos_orders',
+      entity_id: order._id,
+      new_values: {
+        round: nextRound,
+        newItemsCount: data.items.length,
+        newTotal: order.total,
+      },
+      outcome: 'success',
+    });
+
+    return order;
+  }
+
+  /**
+   * Manager approves order / KOT dispatch
+   */
+  static async approveOrder(orderId: string, data: ApproveOrderInput, managerUserId?: string) {
+    let order: any = null;
+    if (mongoose.isValidObjectId(orderId)) {
+      order = await PosOrder.findById(orderId);
+    }
+    if (!order) {
+      order = await PosOrder.findOne({ orderNumber: orderId });
+    }
+    if (!order) throw new ApiError(404, 'POS Order not found');
+
+    order.approval_status = 'APPROVED';
+    order.approval_reason = data.notes || 'Approved by Manager';
+    order.approved_by = managerUserId && mongoose.isValidObjectId(managerUserId) ? new mongoose.Types.ObjectId(managerUserId) : null;
+    order.approved_at = new Date();
+    order.kitchen_status = 'pending';
+
+    await order.save();
+
+    await this.logAuditEvent({
+      restaurant_id: order.restaurantId,
+      branch_id: order.branchId,
+      user_id: managerUserId,
+      action: 'ORDER_APPROVED',
+      entity_type: 'pos_orders',
+      entity_id: order._id,
+      new_values: { approval_status: 'APPROVED' },
+      outcome: 'success',
+    });
+
+    return order;
+  }
+
+  /**
+   * Manager rejects order
+   */
+  static async rejectOrder(orderId: string, data: RejectOrderInput, managerUserId?: string) {
+    let order: any = null;
+    if (mongoose.isValidObjectId(orderId)) {
+      order = await PosOrder.findById(orderId);
+    }
+    if (!order) {
+      order = await PosOrder.findOne({ orderNumber: orderId });
+    }
+    if (!order) throw new ApiError(404, 'POS Order not found');
+
+    order.approval_status = 'REJECTED';
+    order.approval_reason = data.reason;
+    order.approved_by = managerUserId && mongoose.isValidObjectId(managerUserId) ? new mongoose.Types.ObjectId(managerUserId) : null;
+    order.approved_at = new Date();
+    order.orderStatus = 'CANCELLED';
+    order.kitchen_status = 'cancelled';
+
+    await order.save();
+
+    if (order.table_number) {
+      await PosService.syncTableStatus(order.branchId, order.table_number, 'available', managerUserId, 'system', `Order #${order.orderNumber} rejected by manager. Table released.`);
+    }
+
+    await this.logAuditEvent({
+      restaurant_id: order.restaurantId,
+      branch_id: order.branchId,
+      user_id: managerUserId,
+      action: 'ORDER_REJECTED',
+      entity_type: 'pos_orders',
+      entity_id: order._id,
+      new_values: { approval_status: 'REJECTED', reason: data.reason },
+      outcome: 'success',
+    });
+
+    return order;
   }
 }
 

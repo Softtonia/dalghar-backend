@@ -3,6 +3,7 @@ import { Schema, model, Document, Types } from 'mongoose';
 export type PosTerminalStatus = 'active' | 'inactive' | 'maintenance' | 'retired' | 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE' | 'RETIRED';
 export type PosDeviceType = 'desktop' | 'tablet' | 'mobile' | 'all_in_one';
 export type PosConnectivityStatus = 'online' | 'offline' | 'unknown';
+export type PosTerminalType = 'WAITER' | 'CASHIER' | 'KITCHEN' | 'MANAGER';
 
 export interface IPosTerminalSettings {
   auto_print_receipt?: boolean;
@@ -16,6 +17,7 @@ export interface IPosTerminalSettings {
   allow_cash_out?: boolean;
   allow_offline_sales?: boolean;
   require_shift_before_sales?: boolean;
+  require_manager_approval?: boolean;
   receipt_template_id?: Types.ObjectId | string | null;
   bill_number_series_id?: Types.ObjectId | string | null;
   default_printer_id?: Types.ObjectId | string | null;
@@ -36,6 +38,7 @@ export interface IPosTerminal extends Document {
   branch_id: Types.ObjectId;
   terminal_code: string;
   terminal_name: string;
+  terminal_type: PosTerminalType;
   name: string; // Alias for backward compatibility
   device_identifier?: string | null;
   device_type: PosDeviceType;
@@ -62,6 +65,12 @@ const posTerminalSchema = new Schema<IPosTerminal>(
     branch_id: { type: Schema.Types.ObjectId, ref: 'Branch', required: true, index: true },
     terminal_code: { type: String, required: true, trim: true, maxlength: 50 },
     terminal_name: { type: String, trim: true, maxlength: 150 },
+    terminal_type: {
+      type: String,
+      enum: ['WAITER', 'CASHIER', 'KITCHEN', 'MANAGER'],
+      default: 'CASHIER',
+      index: true,
+    },
     name: { type: String, required: true, trim: true, maxlength: 150 },
     device_identifier: { type: String, trim: true, default: null, maxlength: 255 },
     device_type: {

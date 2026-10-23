@@ -14,8 +14,11 @@ export interface IPosOrderItem {
   subtotal: number;
   notes?: string | null;
   kitchenStatus?: 'pending' | 'preparing' | 'ready';
+  kot_round?: number;
   addons?: Array<{ name: string; price: number }>;
 }
+
+export type PosApprovalStatus = 'NONE' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
 
 export interface IPosOrder extends Document {
   orderNumber: string;
@@ -30,6 +33,7 @@ export interface IPosOrder extends Document {
   customer_name?: string | null;
   customer_phone?: string | null;
   customerId?: Types.ObjectId | null;
+  order_source?: 'pos' | 'qr_menu' | 'waiter_app' | 'online';
   order_type: PosOrderType;
   kitchen_status: PosKitchenStatus;
   waiter_id?: Types.ObjectId | null;
@@ -42,6 +46,11 @@ export interface IPosOrder extends Document {
   paymentMethod: PosPaymentMethod;
   paymentStatus: PosPaymentStatus;
   orderStatus: PosOrderStatus;
+  approval_status?: PosApprovalStatus;
+  approval_reason?: string | null;
+  approved_by?: Types.ObjectId | null;
+  approved_at?: Date | null;
+  current_kot_round?: number;
   notes?: string;
   prepared_at?: Date | null;
   ready_at?: Date | null;
@@ -65,6 +74,7 @@ const posOrderItemSchema = new Schema<IPosOrderItem>(
       enum: ['pending', 'preparing', 'ready'],
       default: 'pending',
     },
+    kot_round: { type: Number, default: 1 },
     addons: [
       {
         name: { type: String, required: true },
@@ -89,6 +99,12 @@ const posOrderSchema = new Schema<IPosOrder>(
     customer_name: { type: String, default: null, trim: true, index: true },
     customer_phone: { type: String, default: null, trim: true },
     customerId: { type: Schema.Types.ObjectId, ref: 'Customer', default: null, index: true },
+    order_source: {
+      type: String,
+      enum: ['pos', 'qr_menu', 'waiter_app', 'online'],
+      default: 'pos',
+      index: true,
+    },
     order_type: {
       type: String,
       enum: ['dine_in', 'takeaway', 'delivery'],
@@ -125,6 +141,16 @@ const posOrderSchema = new Schema<IPosOrder>(
       default: 'COMPLETED',
       index: true,
     },
+    approval_status: {
+      type: String,
+      enum: ['NONE', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED'],
+      default: 'NONE',
+      index: true,
+    },
+    approval_reason: { type: String, default: null },
+    approved_by: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+    approved_at: { type: Date, default: null },
+    current_kot_round: { type: Number, default: 1 },
     notes: { type: String, trim: true },
     prepared_at: { type: Date, default: null },
     ready_at: { type: Date, default: null },

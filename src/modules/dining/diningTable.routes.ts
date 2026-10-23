@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticate, requirePermission } from '../../middleware/auth.middleware.js';
 import { PERMISSIONS } from '../../config/permissions.js';
 import { DiningController } from './dining.controller.js';
+import { QrMenuController } from './qrMenu.controller.js';
 
 const router = Router();
 
@@ -23,6 +24,30 @@ router.get(
 );
 
 // Specific sub-resource routes must come before /:id to avoid param shadowing
+// QR Code Management:
+// GET   /dining-tables/:tableId/qr-code
+router.get(
+  '/:tableId/qr-code',
+  authenticate,
+  requirePermission(PERMISSIONS.TABLE_VIEW),
+  QrMenuController.getTableQr
+);
+
+// POST  /dining-tables/:tableId/qr-code
+router.post(
+  '/:tableId/qr-code',
+  authenticate,
+  requirePermission(PERMISSIONS.TABLE_MANAGE),
+  QrMenuController.getTableQr
+);
+
+// POST  /dining-tables/:tableId/qr-code/regenerate
+router.post(
+  '/:tableId/qr-code/regenerate',
+  authenticate,
+  requirePermission(PERMISSIONS.TABLE_MANAGE),
+  QrMenuController.regenerateTableQr
+);
 // PATCH  /dining-tables/:id/status         Change operational status
 router.patch(
   '/:id/status',
